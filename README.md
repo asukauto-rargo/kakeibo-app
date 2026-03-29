@@ -101,3 +101,4 @@ Site URL に GitHub Pages の URL を設定してください。
 - **Backend/DB**: Supabase (PostgreSQL + Auth + Storage)
 - **OCR**: Tesseract.js 5 (日本語+英語)
 - **Deploy**: GitHub Pages + GitHub Actions
+# Updated
