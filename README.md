@@ -102,3 +102,4 @@ Site URL に GitHub Pages の URL を設定してください。
 - **OCR**: Tesseract.js 5 (日本語+英語)
 - **Deploy**: GitHub Pages + GitHub Actions
 # Updated
+# Deploy fix
