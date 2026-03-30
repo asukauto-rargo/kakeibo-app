@@ -23,6 +23,8 @@ export default function ListTab({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; timer: ReturnType<typeof setTimeout> } | null>(null);
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
+  const [receiptImageUrl, setReceiptImageUrl] = useState<string | null>(null);
+  const [receiptImageLoading, setReceiptImageLoading] = useState(false);
 
   const userOptions = ['全員', settings.user1Name || 'ユーザー1', settings.user2Name || 'ユーザー2', settings.user3Name || 'ユーザー3'];
   const typeOptions = ['全種類', '支出', '収入'];
@@ -86,6 +88,26 @@ export default function ListTab({
     return cat ? (CAT_COLORS[cat.id] || '#999') : '#999';
   };
 
+  const handleViewReceipt = async (receiptUrl: string) => {
+    setReceiptImageLoading(true);
+    try {
+      const { data } = supabase.storage.from('receipts').getPublicUrl(receiptUrl);
+      if (data?.publicUrl) {
+        setReceiptImageUrl(data.publicUrl);
+      } else {
+        // Fallback: try signed URL
+        const { data: signedData } = await supabase.storage.from('receipts').createSignedUrl(receiptUrl, 3600);
+        if (signedData?.signedUrl) {
+          setReceiptImageUrl(signedData.signedUrl);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load receipt image:', err);
+    } finally {
+      setReceiptImageLoading(false);
+    }
+  };
+
   /** レシート登録のメモから詳細アイテムを抽出 */
   const parseReceiptMemo = (memo: string): {
     isReceipt: boolean;
@@ -125,6 +147,29 @@ export default function ListTab({
 
   return (
     <div className="list-tab card">
+      {/* Receipt image viewer modal */}
+      {receiptImageUrl && (
+        <div
+          className="receipt-overlay"
+          onClick={() => setReceiptImageUrl(null)}
+        >
+          <div
+            className="receipt-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ textAlign: 'center' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>レシート画像</h3>
+              <button onClick={() => setReceiptImageUrl(null)} className="close-btn">✕</button>
+            </div>
+            <img
+              src={receiptImageUrl}
+              alt="レシート"
+              style={{ maxWidth: '100%', maxHeight: '70vh', borderRadius: 8, objectFit: 'contain' }}
+            />
+          </div>
+        </div>
+      )}
       {/* Filter Section */}
       <div className="filter-group">
         <div className="filter-row" style={{ marginBottom: 4 }}>
@@ -283,6 +328,21 @@ export default function ListTab({
                         <span className="receipt-detail-amount">{it.amount}</span>
                       </div>
                     ))}
+                    {/* View receipt image button */}
+                    {entry.receipt_url && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleViewReceipt(entry.receipt_url!); }}
+                        disabled={receiptImageLoading}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                          width: '100%', marginTop: 8, padding: '6px 0',
+                          background: '#f8f9fa', border: '1px solid #e0e0e0', borderRadius: 6,
+                          fontSize: 11, color: '#555', cursor: 'pointer',
+                        }}
+                      >
+                        {receiptImageLoading ? '読込中...' : '📷 レシート画像を表示'}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

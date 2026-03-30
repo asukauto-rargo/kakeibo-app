@@ -89,6 +89,7 @@ export default function InputTab({
     date: string;
     memo: string;
     items: ParsedReceiptItem[];
+    receiptStoragePath?: string;
   }) => {
     setShowReceiptUpload(false);
     setIsLoading(true);
@@ -113,7 +114,7 @@ export default function InputTab({
       }
       const mainCategory = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || '食費';
 
-      const newEntry = {
+      const newEntry: Record<string, unknown> = {
         user_name: result.user,
         type: 'expense' as const,
         category: mainCategory,
@@ -121,6 +122,9 @@ export default function InputTab({
         memo: memoStr,
         date: result.date,
       };
+      if (result.receiptStoragePath) {
+        newEntry.receipt_url = result.receiptStoragePath;
+      }
 
       const { data, error } = await supabase
         .from('entries')

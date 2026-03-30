@@ -13,6 +13,7 @@ interface ReceiptUploadProps {
     date: string;
     memo: string;
     items: ParsedReceiptItem[];
+    receiptStoragePath?: string;
   }) => void;
   onClose: () => void;
 }
@@ -42,6 +43,7 @@ export default function ReceiptUpload({
   const [toast, setToast] = useState<string | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
+  const [receiptStoragePath, setReceiptStoragePath] = useState<string | null>(null);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -81,7 +83,11 @@ export default function ReceiptUpload({
       const { error: uploadError } = await supabase.storage
         .from('receipts')
         .upload(storagePath, selectedFile);
-      if (uploadError) console.warn('Storage upload failed:', uploadError.message);
+      if (uploadError) {
+        console.warn('Storage upload failed:', uploadError.message);
+      } else {
+        setReceiptStoragePath(storagePath);
+      }
 
       setProgress(30);
 
@@ -154,6 +160,7 @@ export default function ReceiptUpload({
       date: receiptDate,
       memo: receiptMemo || storeName || '',
       items: validItems,
+      receiptStoragePath: receiptStoragePath || undefined,
     });
   };
 
@@ -161,7 +168,7 @@ export default function ReceiptUpload({
 
   const resetFile = () => {
     setPreview(null); setSelectedFile(null); setItems([]); setErrorDetail(null);
-    setStoreName(''); setReceiptDate(currentDate);
+    setStoreName(''); setReceiptDate(currentDate); setReceiptStoragePath(null);
     if (cameraInputRef.current) cameraInputRef.current.value = '';
     if (galleryInputRef.current) galleryInputRef.current.value = '';
   };
@@ -231,67 +238,163 @@ export default function ReceiptUpload({
           </button>
         )}
 
-        {/* Loading Animation with Pixel Art Cat */}
+        {/* Loading Animation with Pixel Art Cat + Bicycle Couple */}
         {isProcessing && (
           <div className="receipt-section">
             <div className="loading-cat-container">
-              {/* Ragdoll cat pixel art running on the bar */}
               <div className="loading-cat-track">
+                {/* Cat runs ahead */}
                 <div className="pixel-cat-runner">
-                  <svg width="32" height="24" viewBox="0 0 32 24" style={{ imageRendering: 'pixelated' }}>
-                    {/* Pixel art ragdoll cat - frame animation via CSS */}
+                  <svg width="48" height="36" viewBox="0 0 24 18" style={{ imageRendering: 'pixelated' }}>
+                    {/* Frame 1: front legs extended, back legs tucked */}
                     <g className="cat-frame cat-frame-1">
-                      {/* Ears */}
-                      <rect x="4" y="0" width="3" height="3" fill="#F5DEB3"/>
-                      <rect x="11" y="0" width="3" height="3" fill="#F5DEB3"/>
-                      <rect x="5" y="0" width="1" height="2" fill="#FFB6C1"/>
-                      <rect x="12" y="0" width="1" height="2" fill="#FFB6C1"/>
-                      {/* Head */}
-                      <rect x="3" y="3" width="12" height="8" fill="#F5DEB3"/>
-                      <rect x="5" y="5" width="2" height="2" fill="#4A90D9"/>
-                      <rect x="10" y="5" width="2" height="2" fill="#4A90D9"/>
-                      <rect x="8" y="7" width="2" height="1" fill="#FFB6C1"/>
-                      {/* Dark markings on face */}
-                      <rect x="3" y="3" width="2" height="2" fill="#C4A882"/>
-                      <rect x="13" y="3" width="1" height="2" fill="#C4A882"/>
-                      {/* Body */}
-                      <rect x="6" y="11" width="14" height="7" fill="#F5DEB3"/>
-                      <rect x="8" y="11" width="10" height="3" fill="#C4A882"/>
-                      {/* Front legs (running pose 1) */}
-                      <rect x="8" y="18" width="2" height="5" fill="#F5DEB3"/>
-                      <rect x="14" y="18" width="2" height="3" fill="#F5DEB3"/>
-                      {/* Back legs */}
-                      <rect x="17" y="18" width="2" height="4" fill="#F5DEB3"/>
-                      {/* Tail */}
-                      <rect x="20" y="11" width="6" height="2" fill="#C4A882"/>
-                      <rect x="25" y="9" width="3" height="2" fill="#C4A882"/>
-                      <rect x="27" y="7" width="2" height="2" fill="#F5DEB3"/>
+                      {/* Ears - dark chocolate */}
+                      <rect x="2" y="0" width="2" height="2" fill="#5C3A1E"/>
+                      <rect x="7" y="0" width="2" height="2" fill="#5C3A1E"/>
+                      <rect x="3" y="0" width="1" height="1" fill="#FFB6C1"/>
+                      <rect x="8" y="0" width="1" height="1" fill="#FFB6C1"/>
+                      {/* Head - dark brown mask top, white muzzle */}
+                      <rect x="1" y="2" width="9" height="6" fill="#F5E6D0"/>
+                      <rect x="2" y="2" width="7" height="3" fill="#6B4226"/>
+                      <rect x="3" y="3" width="2" height="2" fill="#4A90D9"/>
+                      <rect x="6" y="3" width="2" height="2" fill="#4A90D9"/>
+                      <rect x="5" y="5" width="1" height="1" fill="#FFB6C1"/>
+                      {/* White chin */}
+                      <rect x="3" y="6" width="5" height="1" fill="#FFFFFF"/>
+                      {/* Body - cream with brown saddle */}
+                      <rect x="4" y="8" width="11" height="4" fill="#F5E6D0"/>
+                      <rect x="6" y="8" width="7" height="2" fill="#B8875A"/>
+                      {/* White belly */}
+                      <rect x="5" y="10" width="6" height="2" fill="#FFFFFF"/>
+                      {/* Front legs - white paws, stretched forward */}
+                      <rect x="5" y="12" width="2" height="3" fill="#FFFFFF"/>
+                      <rect x="3" y="14" width="2" height="2" fill="#FFFFFF"/>
+                      {/* Back legs - white, tucked under */}
+                      <rect x="12" y="12" width="2" height="2" fill="#FFFFFF"/>
+                      <rect x="13" y="14" width="2" height="2" fill="#FFFFFF"/>
+                      {/* Tail - dark brown, fluffy, up */}
+                      <rect x="15" y="8" width="2" height="2" fill="#6B4226"/>
+                      <rect x="17" y="6" width="2" height="2" fill="#6B4226"/>
+                      <rect x="19" y="4" width="2" height="3" fill="#5C3A1E"/>
+                      <rect x="20" y="3" width="2" height="2" fill="#5C3A1E"/>
                     </g>
+                    {/* Frame 2: front legs tucked, back legs extended */}
                     <g className="cat-frame cat-frame-2">
                       {/* Ears */}
-                      <rect x="4" y="1" width="3" height="3" fill="#F5DEB3"/>
-                      <rect x="11" y="1" width="3" height="3" fill="#F5DEB3"/>
-                      <rect x="5" y="1" width="1" height="2" fill="#FFB6C1"/>
-                      <rect x="12" y="1" width="1" height="2" fill="#FFB6C1"/>
+                      <rect x="2" y="1" width="2" height="2" fill="#5C3A1E"/>
+                      <rect x="7" y="1" width="2" height="2" fill="#5C3A1E"/>
+                      <rect x="3" y="1" width="1" height="1" fill="#FFB6C1"/>
+                      <rect x="8" y="1" width="1" height="1" fill="#FFB6C1"/>
                       {/* Head */}
-                      <rect x="3" y="4" width="12" height="8" fill="#F5DEB3"/>
-                      <rect x="5" y="6" width="2" height="2" fill="#4A90D9"/>
-                      <rect x="10" y="6" width="2" height="2" fill="#4A90D9"/>
-                      <rect x="8" y="8" width="2" height="1" fill="#FFB6C1"/>
-                      <rect x="3" y="4" width="2" height="2" fill="#C4A882"/>
-                      <rect x="13" y="4" width="1" height="2" fill="#C4A882"/>
+                      <rect x="1" y="3" width="9" height="6" fill="#F5E6D0"/>
+                      <rect x="2" y="3" width="7" height="3" fill="#6B4226"/>
+                      <rect x="3" y="4" width="2" height="2" fill="#4A90D9"/>
+                      <rect x="6" y="4" width="2" height="2" fill="#4A90D9"/>
+                      <rect x="5" y="6" width="1" height="1" fill="#FFB6C1"/>
+                      <rect x="3" y="7" width="5" height="1" fill="#FFFFFF"/>
                       {/* Body */}
-                      <rect x="6" y="12" width="14" height="6" fill="#F5DEB3"/>
-                      <rect x="8" y="12" width="10" height="3" fill="#C4A882"/>
-                      {/* Front legs (running pose 2) */}
-                      <rect x="8" y="18" width="2" height="3" fill="#F5DEB3"/>
-                      <rect x="13" y="18" width="2" height="5" fill="#F5DEB3"/>
-                      {/* Back legs */}
-                      <rect x="18" y="18" width="2" height="5" fill="#F5DEB3"/>
-                      {/* Tail */}
-                      <rect x="20" y="10" width="6" height="2" fill="#C4A882"/>
-                      <rect x="25" y="8" width="3" height="2" fill="#C4A882"/>
-                      <rect x="27" y="6" width="2" height="3" fill="#F5DEB3"/>
+                      <rect x="4" y="9" width="11" height="4" fill="#F5E6D0"/>
+                      <rect x="6" y="9" width="7" height="2" fill="#B8875A"/>
+                      <rect x="5" y="11" width="6" height="2" fill="#FFFFFF"/>
+                      {/* Front legs - tucked */}
+                      <rect x="6" y="13" width="2" height="2" fill="#FFFFFF"/>
+                      <rect x="8" y="14" width="2" height="2" fill="#FFFFFF"/>
+                      {/* Back legs - extended back */}
+                      <rect x="13" y="13" width="2" height="3" fill="#FFFFFF"/>
+                      <rect x="15" y="14" width="2" height="2" fill="#FFFFFF"/>
+                      {/* Tail - slightly different angle */}
+                      <rect x="15" y="9" width="2" height="2" fill="#6B4226"/>
+                      <rect x="17" y="7" width="2" height="2" fill="#6B4226"/>
+                      <rect x="19" y="5" width="2" height="3" fill="#5C3A1E"/>
+                      <rect x="20" y="4" width="2" height="2" fill="#5C3A1E"/>
+                    </g>
+                  </svg>
+                </div>
+                {/* Bicycle couple chasing behind */}
+                <div className="pixel-bike-runner">
+                  <svg width="72" height="44" viewBox="0 0 36 22" style={{ imageRendering: 'pixelated' }}>
+                    {/* Frame 1: pedals at 12/6 position */}
+                    <g className="bike-frame bike-frame-1">
+                      {/* Back rider (man) */}
+                      <rect x="8" y="0" width="3" height="3" fill="#4A3728"/>
+                      <rect x="8" y="3" width="3" height="2" fill="#FFDBB4"/>
+                      <rect x="7" y="5" width="5" height="4" fill="#3B82F6"/>
+                      <rect x="7" y="9" width="2" height="3" fill="#333"/>
+                      <rect x="10" y="9" width="2" height="3" fill="#333"/>
+                      <rect x="7" y="12" width="2" height="1" fill="#555"/>
+                      <rect x="11" y="11" width="2" height="1" fill="#555"/>
+                      {/* Front rider (woman) */}
+                      <rect x="17" y="0" width="3" height="3" fill="#2C1810"/>
+                      <rect x="16" y="1" width="1" height="3" fill="#2C1810"/>
+                      <rect x="17" y="3" width="3" height="2" fill="#FFDBB4"/>
+                      <rect x="16" y="5" width="5" height="4" fill="#EF4444"/>
+                      <rect x="16" y="9" width="2" height="3" fill="#333"/>
+                      <rect x="19" y="9" width="2" height="3" fill="#333"/>
+                      <rect x="16" y="12" width="2" height="1" fill="#555"/>
+                      <rect x="20" y="11" width="2" height="1" fill="#555"/>
+                      {/* Bicycle frame */}
+                      <rect x="10" y="13" width="12" height="1" fill="#666"/>
+                      <rect x="9" y="12" width="2" height="2" fill="#666"/>
+                      <rect x="21" y="11" width="2" height="2" fill="#666"/>
+                      <rect x="14" y="11" width="2" height="3" fill="#666"/>
+                      {/* Back wheel */}
+                      <rect x="6" y="15" width="7" height="1" fill="#444"/>
+                      <rect x="5" y="16" width="2" height="3" fill="#444"/>
+                      <rect x="12" y="16" width="2" height="3" fill="#444"/>
+                      <rect x="6" y="19" width="7" height="1" fill="#444"/>
+                      <rect x="7" y="16" width="5" height="1" fill="#444"/>
+                      <rect x="7" y="18" width="5" height="1" fill="#444"/>
+                      {/* Front wheel */}
+                      <rect x="22" y="15" width="7" height="1" fill="#444"/>
+                      <rect x="21" y="16" width="2" height="3" fill="#444"/>
+                      <rect x="28" y="16" width="2" height="3" fill="#444"/>
+                      <rect x="22" y="19" width="7" height="1" fill="#444"/>
+                      <rect x="23" y="16" width="5" height="1" fill="#444"/>
+                      <rect x="23" y="18" width="5" height="1" fill="#444"/>
+                      {/* Spokes / hub */}
+                      <rect x="9" y="17" width="1" height="1" fill="#888"/>
+                      <rect x="25" y="17" width="1" height="1" fill="#888"/>
+                    </g>
+                    {/* Frame 2: pedals rotated */}
+                    <g className="bike-frame bike-frame-2">
+                      {/* Back rider (man) - slight bounce */}
+                      <rect x="8" y="1" width="3" height="3" fill="#4A3728"/>
+                      <rect x="8" y="4" width="3" height="2" fill="#FFDBB4"/>
+                      <rect x="7" y="6" width="5" height="4" fill="#3B82F6"/>
+                      <rect x="8" y="10" width="2" height="3" fill="#333"/>
+                      <rect x="11" y="10" width="2" height="2" fill="#333"/>
+                      <rect x="8" y="13" width="2" height="0" fill="#555"/>
+                      <rect x="11" y="11" width="2" height="1" fill="#555"/>
+                      {/* Front rider (woman) - slight bounce */}
+                      <rect x="17" y="1" width="3" height="3" fill="#2C1810"/>
+                      <rect x="16" y="2" width="1" height="3" fill="#2C1810"/>
+                      <rect x="17" y="4" width="3" height="2" fill="#FFDBB4"/>
+                      <rect x="16" y="6" width="5" height="4" fill="#EF4444"/>
+                      <rect x="17" y="10" width="2" height="3" fill="#333"/>
+                      <rect x="20" y="10" width="2" height="2" fill="#333"/>
+                      <rect x="17" y="13" width="2" height="0" fill="#555"/>
+                      <rect x="20" y="11" width="2" height="1" fill="#555"/>
+                      {/* Bicycle frame */}
+                      <rect x="10" y="13" width="12" height="1" fill="#666"/>
+                      <rect x="9" y="12" width="2" height="2" fill="#666"/>
+                      <rect x="21" y="11" width="2" height="2" fill="#666"/>
+                      <rect x="14" y="11" width="2" height="3" fill="#666"/>
+                      {/* Back wheel */}
+                      <rect x="6" y="15" width="7" height="1" fill="#444"/>
+                      <rect x="5" y="16" width="2" height="3" fill="#444"/>
+                      <rect x="12" y="16" width="2" height="3" fill="#444"/>
+                      <rect x="6" y="19" width="7" height="1" fill="#444"/>
+                      <rect x="7" y="16" width="5" height="1" fill="#444"/>
+                      <rect x="7" y="18" width="5" height="1" fill="#444"/>
+                      {/* Front wheel */}
+                      <rect x="22" y="15" width="7" height="1" fill="#444"/>
+                      <rect x="21" y="16" width="2" height="3" fill="#444"/>
+                      <rect x="28" y="16" width="2" height="3" fill="#444"/>
+                      <rect x="22" y="19" width="7" height="1" fill="#444"/>
+                      <rect x="23" y="16" width="5" height="1" fill="#444"/>
+                      <rect x="23" y="18" width="5" height="1" fill="#444"/>
+                      <rect x="9" y="17" width="1" height="1" fill="#888"/>
+                      <rect x="25" y="17" width="1" height="1" fill="#888"/>
                     </g>
                   </svg>
                 </div>
