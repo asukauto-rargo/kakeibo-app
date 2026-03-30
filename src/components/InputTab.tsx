@@ -114,22 +114,33 @@ export default function InputTab({
       }
       const mainCategory = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || '食費';
 
-      const newEntry: Record<string, unknown> = {
+      const newEntry = {
         user_name: result.user,
         type: 'expense' as const,
         category: mainCategory,
         amount: totalAmount,
         memo: memoStr,
         date: result.date,
+        ...(result.receiptStoragePath ? { receipt_url: result.receiptStoragePath } : {}),
       };
-      if (result.receiptStoragePath) {
-        newEntry.receipt_url = result.receiptStoragePath;
-      }
 
-      const { data, error } = await supabase
+      // まずreceipt_url付きで試す。カラムがなければreceipt_urlなしで再試行
+      let insertResult = await supabase
         .from('entries')
         .insert([newEntry])
         .select();
+
+      if (insertResult.error && result.receiptStoragePath) {
+        // receipt_urlカラムが存在しない場合、除外して再試行
+        const { receipt_url: _unused, ...entryWithoutReceipt } = newEntry;
+        void _unused;
+        insertResult = await supabase
+          .from('entries')
+          .insert([entryWithoutReceipt])
+          .select();
+      }
+
+      const { data, error } = insertResult;
 
       if (error) throw error;
 

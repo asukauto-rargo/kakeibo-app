@@ -238,163 +238,78 @@ export default function ReceiptUpload({
           </button>
         )}
 
-        {/* Loading Animation with Pixel Art Cat + Bicycle Couple */}
+        {/* Loading Animation with Pixel Art Ragdoll Cat */}
         {isProcessing && (
           <div className="receipt-section">
             <div className="loading-cat-container">
               <div className="loading-cat-track">
-                {/* Cat runs ahead */}
                 <div className="pixel-cat-runner">
                   <svg width="48" height="36" viewBox="0 0 24 18" style={{ imageRendering: 'pixelated' }}>
-                    {/* Frame 1: front legs extended, back legs tucked */}
+                    {/* Frame 1: front legs extended — cat faces RIGHT (head=right, tail=left) */}
                     <g className="cat-frame cat-frame-1">
-                      {/* Ears - dark chocolate */}
-                      <rect x="2" y="0" width="2" height="2" fill="#5C3A1E"/>
-                      <rect x="7" y="0" width="2" height="2" fill="#5C3A1E"/>
-                      <rect x="3" y="0" width="1" height="1" fill="#FFB6C1"/>
-                      <rect x="8" y="0" width="1" height="1" fill="#FFB6C1"/>
-                      {/* Head - dark brown mask top, white muzzle */}
-                      <rect x="1" y="2" width="9" height="6" fill="#F5E6D0"/>
-                      <rect x="2" y="2" width="7" height="3" fill="#6B4226"/>
-                      <rect x="3" y="3" width="2" height="2" fill="#4A90D9"/>
-                      <rect x="6" y="3" width="2" height="2" fill="#4A90D9"/>
-                      <rect x="5" y="5" width="1" height="1" fill="#FFB6C1"/>
-                      {/* White chin */}
-                      <rect x="3" y="6" width="5" height="1" fill="#FFFFFF"/>
+                      {/* Tail - dark brown, fluffy, left side */}
+                      <rect x="0" y="3" width="2" height="2" fill="#5C3A1E"/>
+                      <rect x="1" y="4" width="2" height="3" fill="#5C3A1E"/>
+                      <rect x="3" y="6" width="2" height="2" fill="#6B4226"/>
+                      <rect x="5" y="8" width="2" height="2" fill="#6B4226"/>
                       {/* Body - cream with brown saddle */}
-                      <rect x="4" y="8" width="11" height="4" fill="#F5E6D0"/>
-                      <rect x="6" y="8" width="7" height="2" fill="#B8875A"/>
+                      <rect x="7" y="8" width="11" height="4" fill="#F5E6D0"/>
+                      <rect x="9" y="8" width="7" height="2" fill="#B8875A"/>
                       {/* White belly */}
-                      <rect x="5" y="10" width="6" height="2" fill="#FFFFFF"/>
-                      {/* Front legs - white paws, stretched forward */}
-                      <rect x="5" y="12" width="2" height="3" fill="#FFFFFF"/>
-                      <rect x="3" y="14" width="2" height="2" fill="#FFFFFF"/>
-                      {/* Back legs - white, tucked under */}
-                      <rect x="12" y="12" width="2" height="2" fill="#FFFFFF"/>
-                      <rect x="13" y="14" width="2" height="2" fill="#FFFFFF"/>
-                      {/* Tail - dark brown, fluffy, up */}
-                      <rect x="15" y="8" width="2" height="2" fill="#6B4226"/>
-                      <rect x="17" y="6" width="2" height="2" fill="#6B4226"/>
-                      <rect x="19" y="4" width="2" height="3" fill="#5C3A1E"/>
-                      <rect x="20" y="3" width="2" height="2" fill="#5C3A1E"/>
+                      <rect x="10" y="10" width="6" height="2" fill="#FFFFFF"/>
+                      {/* Head - dark brown mask top, white muzzle */}
+                      <rect x="14" y="2" width="9" height="6" fill="#F5E6D0"/>
+                      <rect x="15" y="2" width="7" height="3" fill="#6B4226"/>
+                      {/* Ears - dark chocolate */}
+                      <rect x="15" y="0" width="2" height="2" fill="#5C3A1E"/>
+                      <rect x="20" y="0" width="2" height="2" fill="#5C3A1E"/>
+                      <rect x="16" y="0" width="1" height="1" fill="#FFB6C1"/>
+                      <rect x="21" y="0" width="1" height="1" fill="#FFB6C1"/>
+                      {/* Eyes - blue */}
+                      <rect x="16" y="3" width="2" height="2" fill="#4A90D9"/>
+                      <rect x="19" y="3" width="2" height="2" fill="#4A90D9"/>
+                      {/* Nose - pink */}
+                      <rect x="18" y="5" width="1" height="1" fill="#FFB6C1"/>
+                      {/* White chin */}
+                      <rect x="16" y="6" width="5" height="1" fill="#FFFFFF"/>
+                      {/* Front legs (right side) - stretched forward */}
+                      <rect x="17" y="12" width="2" height="3" fill="#FFFFFF"/>
+                      <rect x="19" y="14" width="2" height="2" fill="#FFFFFF"/>
+                      {/* Back legs (left side) - tucked */}
+                      <rect x="9" y="12" width="2" height="2" fill="#FFFFFF"/>
+                      <rect x="7" y="14" width="2" height="2" fill="#FFFFFF"/>
                     </g>
-                    {/* Frame 2: front legs tucked, back legs extended */}
+                    {/* Frame 2: legs swapped — cat faces RIGHT */}
                     <g className="cat-frame cat-frame-2">
-                      {/* Ears */}
-                      <rect x="2" y="1" width="2" height="2" fill="#5C3A1E"/>
-                      <rect x="7" y="1" width="2" height="2" fill="#5C3A1E"/>
-                      <rect x="3" y="1" width="1" height="1" fill="#FFB6C1"/>
-                      <rect x="8" y="1" width="1" height="1" fill="#FFB6C1"/>
-                      {/* Head */}
-                      <rect x="1" y="3" width="9" height="6" fill="#F5E6D0"/>
-                      <rect x="2" y="3" width="7" height="3" fill="#6B4226"/>
-                      <rect x="3" y="4" width="2" height="2" fill="#4A90D9"/>
-                      <rect x="6" y="4" width="2" height="2" fill="#4A90D9"/>
-                      <rect x="5" y="6" width="1" height="1" fill="#FFB6C1"/>
-                      <rect x="3" y="7" width="5" height="1" fill="#FFFFFF"/>
-                      {/* Body */}
-                      <rect x="4" y="9" width="11" height="4" fill="#F5E6D0"/>
-                      <rect x="6" y="9" width="7" height="2" fill="#B8875A"/>
-                      <rect x="5" y="11" width="6" height="2" fill="#FFFFFF"/>
-                      {/* Front legs - tucked */}
-                      <rect x="6" y="13" width="2" height="2" fill="#FFFFFF"/>
-                      <rect x="8" y="14" width="2" height="2" fill="#FFFFFF"/>
-                      {/* Back legs - extended back */}
-                      <rect x="13" y="13" width="2" height="3" fill="#FFFFFF"/>
-                      <rect x="15" y="14" width="2" height="2" fill="#FFFFFF"/>
                       {/* Tail - slightly different angle */}
-                      <rect x="15" y="9" width="2" height="2" fill="#6B4226"/>
-                      <rect x="17" y="7" width="2" height="2" fill="#6B4226"/>
-                      <rect x="19" y="5" width="2" height="3" fill="#5C3A1E"/>
-                      <rect x="20" y="4" width="2" height="2" fill="#5C3A1E"/>
-                    </g>
-                  </svg>
-                </div>
-                {/* Bicycle couple chasing behind */}
-                <div className="pixel-bike-runner">
-                  <svg width="72" height="44" viewBox="0 0 36 22" style={{ imageRendering: 'pixelated' }}>
-                    {/* Frame 1: pedals at 12/6 position */}
-                    <g className="bike-frame bike-frame-1">
-                      {/* Back rider (man) */}
-                      <rect x="8" y="0" width="3" height="3" fill="#4A3728"/>
-                      <rect x="8" y="3" width="3" height="2" fill="#FFDBB4"/>
-                      <rect x="7" y="5" width="5" height="4" fill="#3B82F6"/>
-                      <rect x="7" y="9" width="2" height="3" fill="#333"/>
-                      <rect x="10" y="9" width="2" height="3" fill="#333"/>
-                      <rect x="7" y="12" width="2" height="1" fill="#555"/>
-                      <rect x="11" y="11" width="2" height="1" fill="#555"/>
-                      {/* Front rider (woman) */}
-                      <rect x="17" y="0" width="3" height="3" fill="#2C1810"/>
-                      <rect x="16" y="1" width="1" height="3" fill="#2C1810"/>
-                      <rect x="17" y="3" width="3" height="2" fill="#FFDBB4"/>
-                      <rect x="16" y="5" width="5" height="4" fill="#EF4444"/>
-                      <rect x="16" y="9" width="2" height="3" fill="#333"/>
-                      <rect x="19" y="9" width="2" height="3" fill="#333"/>
-                      <rect x="16" y="12" width="2" height="1" fill="#555"/>
-                      <rect x="20" y="11" width="2" height="1" fill="#555"/>
-                      {/* Bicycle frame */}
-                      <rect x="10" y="13" width="12" height="1" fill="#666"/>
-                      <rect x="9" y="12" width="2" height="2" fill="#666"/>
-                      <rect x="21" y="11" width="2" height="2" fill="#666"/>
-                      <rect x="14" y="11" width="2" height="3" fill="#666"/>
-                      {/* Back wheel */}
-                      <rect x="6" y="15" width="7" height="1" fill="#444"/>
-                      <rect x="5" y="16" width="2" height="3" fill="#444"/>
-                      <rect x="12" y="16" width="2" height="3" fill="#444"/>
-                      <rect x="6" y="19" width="7" height="1" fill="#444"/>
-                      <rect x="7" y="16" width="5" height="1" fill="#444"/>
-                      <rect x="7" y="18" width="5" height="1" fill="#444"/>
-                      {/* Front wheel */}
-                      <rect x="22" y="15" width="7" height="1" fill="#444"/>
-                      <rect x="21" y="16" width="2" height="3" fill="#444"/>
-                      <rect x="28" y="16" width="2" height="3" fill="#444"/>
-                      <rect x="22" y="19" width="7" height="1" fill="#444"/>
-                      <rect x="23" y="16" width="5" height="1" fill="#444"/>
-                      <rect x="23" y="18" width="5" height="1" fill="#444"/>
-                      {/* Spokes / hub */}
-                      <rect x="9" y="17" width="1" height="1" fill="#888"/>
-                      <rect x="25" y="17" width="1" height="1" fill="#888"/>
-                    </g>
-                    {/* Frame 2: pedals rotated */}
-                    <g className="bike-frame bike-frame-2">
-                      {/* Back rider (man) - slight bounce */}
-                      <rect x="8" y="1" width="3" height="3" fill="#4A3728"/>
-                      <rect x="8" y="4" width="3" height="2" fill="#FFDBB4"/>
-                      <rect x="7" y="6" width="5" height="4" fill="#3B82F6"/>
-                      <rect x="8" y="10" width="2" height="3" fill="#333"/>
-                      <rect x="11" y="10" width="2" height="2" fill="#333"/>
-                      <rect x="8" y="13" width="2" height="0" fill="#555"/>
-                      <rect x="11" y="11" width="2" height="1" fill="#555"/>
-                      {/* Front rider (woman) - slight bounce */}
-                      <rect x="17" y="1" width="3" height="3" fill="#2C1810"/>
-                      <rect x="16" y="2" width="1" height="3" fill="#2C1810"/>
-                      <rect x="17" y="4" width="3" height="2" fill="#FFDBB4"/>
-                      <rect x="16" y="6" width="5" height="4" fill="#EF4444"/>
-                      <rect x="17" y="10" width="2" height="3" fill="#333"/>
-                      <rect x="20" y="10" width="2" height="2" fill="#333"/>
-                      <rect x="17" y="13" width="2" height="0" fill="#555"/>
-                      <rect x="20" y="11" width="2" height="1" fill="#555"/>
-                      {/* Bicycle frame */}
-                      <rect x="10" y="13" width="12" height="1" fill="#666"/>
-                      <rect x="9" y="12" width="2" height="2" fill="#666"/>
-                      <rect x="21" y="11" width="2" height="2" fill="#666"/>
-                      <rect x="14" y="11" width="2" height="3" fill="#666"/>
-                      {/* Back wheel */}
-                      <rect x="6" y="15" width="7" height="1" fill="#444"/>
-                      <rect x="5" y="16" width="2" height="3" fill="#444"/>
-                      <rect x="12" y="16" width="2" height="3" fill="#444"/>
-                      <rect x="6" y="19" width="7" height="1" fill="#444"/>
-                      <rect x="7" y="16" width="5" height="1" fill="#444"/>
-                      <rect x="7" y="18" width="5" height="1" fill="#444"/>
-                      {/* Front wheel */}
-                      <rect x="22" y="15" width="7" height="1" fill="#444"/>
-                      <rect x="21" y="16" width="2" height="3" fill="#444"/>
-                      <rect x="28" y="16" width="2" height="3" fill="#444"/>
-                      <rect x="22" y="19" width="7" height="1" fill="#444"/>
-                      <rect x="23" y="16" width="5" height="1" fill="#444"/>
-                      <rect x="23" y="18" width="5" height="1" fill="#444"/>
-                      <rect x="9" y="17" width="1" height="1" fill="#888"/>
-                      <rect x="25" y="17" width="1" height="1" fill="#888"/>
+                      <rect x="0" y="4" width="2" height="2" fill="#5C3A1E"/>
+                      <rect x="1" y="5" width="2" height="3" fill="#5C3A1E"/>
+                      <rect x="3" y="7" width="2" height="2" fill="#6B4226"/>
+                      <rect x="5" y="9" width="2" height="2" fill="#6B4226"/>
+                      {/* Body */}
+                      <rect x="7" y="9" width="11" height="4" fill="#F5E6D0"/>
+                      <rect x="9" y="9" width="7" height="2" fill="#B8875A"/>
+                      <rect x="10" y="11" width="6" height="2" fill="#FFFFFF"/>
+                      {/* Head */}
+                      <rect x="14" y="3" width="9" height="6" fill="#F5E6D0"/>
+                      <rect x="15" y="3" width="7" height="3" fill="#6B4226"/>
+                      {/* Ears */}
+                      <rect x="15" y="1" width="2" height="2" fill="#5C3A1E"/>
+                      <rect x="20" y="1" width="2" height="2" fill="#5C3A1E"/>
+                      <rect x="16" y="1" width="1" height="1" fill="#FFB6C1"/>
+                      <rect x="21" y="1" width="1" height="1" fill="#FFB6C1"/>
+                      {/* Eyes */}
+                      <rect x="16" y="4" width="2" height="2" fill="#4A90D9"/>
+                      <rect x="19" y="4" width="2" height="2" fill="#4A90D9"/>
+                      {/* Nose */}
+                      <rect x="18" y="6" width="1" height="1" fill="#FFB6C1"/>
+                      <rect x="16" y="7" width="5" height="1" fill="#FFFFFF"/>
+                      {/* Front legs - tucked */}
+                      <rect x="16" y="13" width="2" height="2" fill="#FFFFFF"/>
+                      <rect x="14" y="14" width="2" height="2" fill="#FFFFFF"/>
+                      {/* Back legs - extended */}
+                      <rect x="8" y="13" width="2" height="3" fill="#FFFFFF"/>
+                      <rect x="6" y="14" width="2" height="2" fill="#FFFFFF"/>
                     </g>
                   </svg>
                 </div>

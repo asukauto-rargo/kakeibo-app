@@ -180,31 +180,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Yu Gothic',sa
 .progress-bar{height:6px;background:#f0f0f0;border-radius:3px;overflow:hidden}
 .progress-fill{height:100%;border-radius:3px;transition:width .3s}
 
-/* === Loading Cat + Bicycle Animation === */
+/* === Loading Cat Animation === */
 .loading-cat-container{position:relative;padding:8px 0 4px}
-.loading-cat-track{position:relative;height:48px;margin-bottom:4px;overflow:hidden}
+.loading-cat-track{position:relative;height:40px;margin-bottom:4px;overflow:hidden}
 .pixel-cat-runner{
   position:absolute;bottom:2px;left:-48px;
   animation:catRun 15s linear forwards;
-  z-index:2;
-}
-.pixel-bike-runner{
-  position:absolute;bottom:-2px;left:-100px;
-  animation:bikeRun 15s linear forwards;
-  z-index:1;
 }
 @keyframes catRun{0%{left:-48px}100%{left:calc(100% + 10px)}}
-@keyframes bikeRun{0%{left:-100px}100%{left:calc(100% - 30px)}}
 /* Cat frame animation - alternate frames via opacity */
 .cat-frame-1{animation:catFrame1 0.2s step-end infinite}
 .cat-frame-2{animation:catFrame2 0.2s step-end infinite}
 @keyframes catFrame1{0%{opacity:1}50%{opacity:0}}
 @keyframes catFrame2{0%{opacity:0}50%{opacity:1}}
-/* Bike frame animation */
-.bike-frame-1{animation:bikeFrame1 0.35s step-end infinite}
-.bike-frame-2{animation:bikeFrame2 0.35s step-end infinite}
-@keyframes bikeFrame1{0%{opacity:1}50%{opacity:0}}
-@keyframes bikeFrame2{0%{opacity:0}50%{opacity:1}}
 /* Smooth loading bar */
 .loading-bar-smooth{
   background:linear-gradient(90deg,#1a1a1a 0%,#555 100%);
