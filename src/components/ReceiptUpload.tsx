@@ -79,12 +79,14 @@ export default function ReceiptUpload({
         showToast('レシートから品目を検出できませんでした');
         setItems([]);
       } else {
-        // Convert category IDs to names for display
-        const itemsWithNames = parsedItems.map((item) => {
-          const cat = EXPENSE_CATS.find((c) => c.id === item.category);
-          return { ...item, category: cat?.name || 'その他' };
-        });
-        setItems(itemsWithNames);
+        // Claude APIはカテゴリ名を直接返すのでそのまま使用
+        // 不明なカテゴリは「その他」にフォールバック
+        const validCatNames = EXPENSE_CATS.map((c) => c.name);
+        const itemsNormalized = parsedItems.map((item) => ({
+          ...item,
+          category: validCatNames.includes(item.category) ? item.category : 'その他',
+        }));
+        setItems(itemsNormalized);
       }
 
       setProgress(100);

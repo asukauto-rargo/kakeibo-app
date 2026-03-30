@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { EXPENSE_CATS, findCatByName } from '../constants';
+import { EXPENSE_CATS, findCat, catToName, CAT_COLORS } from '../constants';
 import type { FixedExpense, Settings } from '../types';
 
 interface FixedTabProps {
@@ -26,9 +26,25 @@ export default function FixedTab({
   const userOptions = [settings.user1Name || 'ユーザー1', settings.user2Name || 'ユーザー2', settings.user3Name || 'ユーザー3'];
   const dayOptions = Array.from({ length: 31 }, (_, i) => i + 1);
 
+  /** user_name を設定の表示名にマッピング */
+  const resolveUserName = (raw: string) => {
+    if (!raw) return '';
+    if (raw === settings.user1Name || raw === settings.user2Name || raw === settings.user3Name) return raw;
+    if (raw === 'user1' || raw === 'ユーザー1') return settings.user1Name || 'ユーザー1';
+    if (raw === 'user2' || raw === 'ユーザー2') return settings.user2Name || 'ユーザー2';
+    if (raw === 'user3' || raw === 'ユーザー3') return settings.user3Name || 'ユーザー3';
+    return raw;
+  };
+
   const getCategoryIcon = (categoryName: string) => {
-    const cat = findCatByName(categoryName);
-    return cat?.icon || '📌';
+    const cat = findCat(categoryName);
+    return cat?.icon || '📦';
+  };
+
+  const getCategoryColor = (categoryName: string) => {
+    const cat = findCat(categoryName);
+    if (!cat) return '#999';
+    return CAT_COLORS[cat.id] || '#999';
   };
 
   const handleAddFixed = async () => {
@@ -87,77 +103,114 @@ export default function FixedTab({
 
   return (
     <div className="fixed-tab">
-      <div className="fixed-form">
-        <div className="form-grid">
+      {/* Add Fixed Expense Card */}
+      <div className="card">
+        <div className="card-title">
+          固定費を追加
+        </div>
+        <form className="fixed-form">
           <div>
             <label>カテゴリ</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)}>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
               {EXPENSE_CATS.map((cat) => (
                 <option key={cat.id} value={cat.name}>{cat.icon} {cat.name}</option>
               ))}
             </select>
           </div>
           <div>
-            <label>金額</label>
-            <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+            <label>金額（円）</label>
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0"
+            />
           </div>
           <div>
-            <label>日付</label>
-            <select value={dayOfMonth} onChange={(e) => setDayOfMonth(parseInt(e.target.value))}>
+            <label>引き落とし日</label>
+            <select
+              value={dayOfMonth}
+              onChange={(e) => setDayOfMonth(parseInt(e.target.value))}
+            >
               {dayOptions.map((d) => (
                 <option key={d} value={d}>{d}日</option>
               ))}
             </select>
           </div>
           <div>
-            <label>ユーザー</label>
-            <select value={userName} onChange={(e) => setUserName(e.target.value)}>
+            <label>入力者</label>
+            <select
+              value={userName}
+              onChange={(e) => setUserName(e.target.value)}
+            >
               {userOptions.map((u) => (
                 <option key={u} value={u}>{u}</option>
               ))}
             </select>
           </div>
           <div className="full-width">
-            <label>メモ</label>
-            <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="メモ（任意）" />
+            <label>メモ（任意）</label>
+            <input
+              type="text"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              placeholder="メモ"
+            />
           </div>
           <div className="full-width">
-            <button onClick={handleAddFixed} className="btn-add">追加</button>
+            <button
+              type="button"
+              onClick={handleAddFixed}
+              className="btn-add"
+            >
+              固定費を追加
+            </button>
           </div>
-        </div>
+        </form>
       </div>
 
-      <div className="fixed-list">
-        {fixedExpenses.length === 0 ? (
-          <div className="empty-state"><span>📋 固定費が登録されていません</span></div>
-        ) : (
-          fixedExpenses.map((fe) => (
-            <div key={fe.id} className="fixed-item">
-              <div className="fixed-left">
-                <span className="fixed-icon">{getCategoryIcon(fe.category)}</span>
-                <div className="fixed-info">
-                  <div className="fixed-category">{fe.category}</div>
-                  {fe.memo && <div className="fixed-memo">{fe.memo}</div>}
+      {/* Registered Fixed Expenses Section */}
+      <div className="card">
+        <div className="card-title">
+          登録済み固定費
+        </div>
+        <div className="fixed-list">
+          {fixedExpenses.length === 0 ? (
+            <div className="empty-state">固定費が登録されていません</div>
+          ) : (
+            fixedExpenses.map((fe) => (
+              <div key={fe.id} className="fixed-item">
+                <div
+                  className="fi-cat-icon"
+                  style={{
+                    backgroundColor: `${getCategoryColor(fe.category)}18`,
+                    color: getCategoryColor(fe.category),
+                  }}
+                >
+                  {getCategoryIcon(fe.category)}
                 </div>
+                <div className="fi-info">
+                  <div className="fi-cat">{catToName(fe.category)}</div>
+                  {fe.memo && <div className="fi-memo">{fe.memo}</div>}
+                </div>
+                <div className="fi-meta">
+                  <span>毎月{fe.day_of_month}日</span>
+                  <span>・{resolveUserName(fe.user_name)}</span>
+                </div>
+                <div className="fi-amount">¥{fe.amount.toLocaleString()}</div>
+                <button
+                  onClick={() => handleDeleteClick(fe.id)}
+                  className={`fi-del ${deleteConfirm?.id === fe.id ? 'confirming' : ''}`}
+                >
+                  {deleteConfirm?.id === fe.id ? '削除' : '✕'}
+                </button>
               </div>
-              <div className="fixed-right">
-                <div className="fixed-meta">
-                  <span className="fixed-day">毎月{fe.day_of_month}日</span>
-                  <span className="fixed-user">· {fe.user_name}</span>
-                </div>
-                <div className="fixed-amount-row">
-                  <span className="fixed-amount">¥{fe.amount.toLocaleString()}</span>
-                  <button
-                    onClick={() => handleDeleteClick(fe.id)}
-                    className={`btn-delete ${deleteConfirm?.id === fe.id ? 'confirming' : ''}`}
-                  >
-                    {deleteConfirm?.id === fe.id ? '削除' : '✕'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))
-        )}
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

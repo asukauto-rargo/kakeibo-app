@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
-import { ALL_CATS, findCatByName } from '../constants';
+import { ALL_CATS, findCat, catToName, catToId, CAT_COLORS } from '../constants';
 import type { Entry, Settings } from '../types';
 
 interface ListTabProps {
@@ -25,15 +25,34 @@ export default function ListTab({
   const userOptions = ['全員', settings.user1Name || 'ユーザー1', settings.user2Name || 'ユーザー2', settings.user3Name || 'ユーザー3'];
   const typeOptions = ['全種類', '支出', '収入'];
 
+  /** user_name を設定の表示名にマッピング */
+  const resolveUserName = (raw: string) => {
+    if (!raw) return '';
+    // すでに設定名と一致すればそのまま
+    if (raw === settings.user1Name || raw === settings.user2Name || raw === settings.user3Name) return raw;
+    // user1 / user2 / user3 パターン
+    if (raw === 'user1' || raw === 'ユーザー1') return settings.user1Name || 'ユーザー1';
+    if (raw === 'user2' || raw === 'ユーザー2') return settings.user2Name || 'ユーザー2';
+    if (raw === 'user3' || raw === 'ユーザー3') return settings.user3Name || 'ユーザー3';
+    return raw;
+  };
+
   const filteredEntries = useMemo(() => {
     return entries
       .filter((entry) => entry.date?.startsWith(currentMonth))
-      .filter((entry) => selectedUser === '全員' || entry.user_name === selectedUser)
+      .filter((entry) => {
+        if (selectedUser === '全員') return true;
+        return resolveUserName(entry.user_name) === selectedUser;
+      })
       .filter((entry) => {
         if (selectedType === '全種類') return true;
         return selectedType === '支出' ? entry.type === 'expense' : entry.type === 'income';
       })
-      .filter((entry) => selectedCategory === '全カテゴリ' || entry.category === selectedCategory)
+      .filter((entry) => {
+        if (selectedCategory === '全カテゴリ') return true;
+        const entryName = catToName(entry.category);
+        return entryName === selectedCategory;
+      })
       .filter((entry) => !selectedDate || entry.date === selectedDate)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [entries, currentMonth, selectedUser, selectedType, selectedCategory, selectedDate]);
@@ -56,84 +75,118 @@ export default function ListTab({
   };
 
   const getUserBadgeColor = (userName: string) => {
-    if (userName === settings.user1Name) return '#3498DB';
-    if (userName === settings.user2Name) return '#E91E63';
-    if (userName === settings.user3Name) return '#9B59B6';
+    const resolved = resolveUserName(userName);
+    if (resolved === settings.user1Name) return '#555';
+    if (resolved === settings.user2Name) return '#888';
+    if (resolved === settings.user3Name) return '#aaa';
     return '#999';
   };
 
   const getCategoryIcon = (category: string) => {
-    const cat = findCatByName(category);
-    return cat?.icon || '📌';
+    const cat = findCat(category);
+    return cat?.icon || '📦';
+  };
+
+  const getCategoryColor = (category: string) => {
+    const cat = findCat(category);
+    if (!cat) return '#999';
+    return CAT_COLORS[cat.id] || '#999';
   };
 
   return (
-    <div className="list-tab">
-      <div className="filter-section">
-        <div className="filter-grid">
-          <div>
-            <label>ユーザー</label>
-            <select value={selectedUser} onChange={(e) => setSelectedUser(e.target.value)}>
-              {userOptions.map((u) => (
-                <option key={u} value={u}>{u}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label>種類</label>
-            <select value={selectedType} onChange={(e) => setSelectedType(e.target.value)}>
-              {typeOptions.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
-          <div className="full-width">
-            <label>カテゴリ</label>
-            <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
-              <option value="全カテゴリ">全カテゴリ</option>
-              {ALL_CATS.map((cat) => (
-                <option key={cat.id} value={cat.name}>{cat.icon} {cat.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label>日付</label>
-            <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
-          </div>
-          <div>
-            <button onClick={() => setSelectedDate('')} className="btn-secondary">日付クリア</button>
-          </div>
-        </div>
+    <div className="list-tab card">
+      {/* Filter Row */}
+      <div className="filter-row">
+        <select
+          value={selectedUser}
+          onChange={(e) => setSelectedUser(e.target.value)}
+        >
+          {userOptions.map((u) => (
+            <option key={u} value={u}>{u}</option>
+          ))}
+        </select>
+
+        <select
+          value={selectedType}
+          onChange={(e) => setSelectedType(e.target.value)}
+        >
+          {typeOptions.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+
+        <select
+          value={selectedCategory}
+          onChange={(e) => setSelectedCategory(e.target.value)}
+        >
+          <option value="全カテゴリ">全カテゴリ</option>
+          {ALL_CATS.map((cat) => (
+            <option key={cat.id} value={cat.name}>{cat.icon} {cat.name}</option>
+          ))}
+        </select>
+
+        <input
+          type="date"
+          value={selectedDate}
+          onChange={(e) => setSelectedDate(e.target.value)}
+        />
+
+        <button
+          onClick={() => setSelectedDate('')}
+          className="btn-secondary"
+        >
+          日付クリア
+        </button>
       </div>
 
-      <div className="entries-list">
+      {/* Entry List */}
+      <div className="entry-list">
         {filteredEntries.length === 0 ? (
-          <div className="empty-state"><span>📊 データがありません</span></div>
+          <div className="empty-state">
+            <span>データがありません</span>
+          </div>
         ) : (
           filteredEntries.map((entry) => (
             <div key={entry.id} className="entry-item">
-              <div className="entry-left">
-                <span className="entry-icon">{getCategoryIcon(entry.category)}</span>
-                <div className="entry-info">
-                  <div className="entry-category">{entry.category}</div>
-                  {entry.memo && <div className="entry-memo">{entry.memo}</div>}
-                </div>
+              {/* Entry Icon */}
+              <div
+                className="entry-icon"
+                style={{
+                  backgroundColor: `${getCategoryColor(entry.category)}18`,
+                  color: getCategoryColor(entry.category),
+                }}
+              >
+                {getCategoryIcon(entry.category)}
               </div>
-              <div className="entry-right">
+
+              {/* Entry Detail */}
+              <div className="entry-detail">
+                <div className="entry-cat">{catToName(entry.category)}</div>
+                {entry.memo && <div className="entry-memo">{entry.memo}</div>}
+              </div>
+
+              {/* Right Section */}
+              <div className="entry-right-section">
+                {/* Meta Information */}
                 <div className="entry-meta">
-                  <span className="user-badge" style={{ backgroundColor: getUserBadgeColor(entry.user_name) }}>
-                    {entry.user_name}
+                  <span
+                    className="user-badge"
+                    style={{ backgroundColor: getUserBadgeColor(entry.user_name) }}
+                  >
+                    {resolveUserName(entry.user_name)}
                   </span>
                   <span className="entry-date">{entry.date}</span>
-                  {entry.is_fixed && <span className="badge-fixed">固定</span>}
+                  {entry.is_fixed && <span className="fixed-badge">固定</span>}
                 </div>
-                <div className="entry-amount-row">
+
+                {/* Amount and Delete */}
+                <div className="entry-amount-section">
                   <span className={`entry-amount ${entry.type === 'expense' ? 'expense' : 'income'}`}>
                     {entry.type === 'expense' ? '-' : '+'} ¥{entry.amount.toLocaleString()}
                   </span>
                   <button
                     onClick={() => handleDeleteClick(entry.id)}
-                    className={`btn-delete ${deleteConfirm?.id === entry.id ? 'confirming' : ''}`}
+                    className={`entry-del ${deleteConfirm?.id === entry.id ? 'confirming' : ''}`}
                   >
                     {deleteConfirm?.id === entry.id ? '削除' : '✕'}
                   </button>

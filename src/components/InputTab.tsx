@@ -130,23 +130,19 @@ export default function InputTab({
         />
       )}
 
-      {toast && <div className="toast">{toast}</div>}
+      {toast && <div className="toast show">{toast}</div>}
 
       <form onSubmit={handleSubmit}>
-        {/* User Selection */}
-        <div className="form-section">
-          <label>ユーザー</label>
-          <div className="user-buttons">
+        {/* User Selection Card */}
+        <div className="card">
+          <div className="card-title">入力者</div>
+          <div className="user-toggle">
             {userNames.map((name, i) => (
               <button
                 key={name}
                 type="button"
                 onClick={() => setCurrentUser(name)}
-                className={`user-btn ${currentUser === name ? 'active' : ''}`}
-                style={{
-                  backgroundColor: currentUser === name ? userColors[i] : undefined,
-                  opacity: currentUser === name ? 1 : 0.4,
-                }}
+                className={`user-toggle-btn ${currentUser === name ? `active-user${i + 1}` : ''}`}
               >
                 {name}
               </button>
@@ -154,37 +150,37 @@ export default function InputTab({
           </div>
         </div>
 
-        {/* Type Selection */}
-        <div className="form-section">
-          <label>種類</label>
-          <div className="type-buttons">
+        {/* Type Selection Card */}
+        <div className="card">
+          <div className="card-title">種類</div>
+          <div className="type-toggle">
             <button
               type="button"
               onClick={() => { setCurrentType('expense'); setSelectedCategory(null); }}
-              className={`type-btn expense ${currentType === 'expense' ? 'active' : ''}`}
+              className={`type-toggle-btn ${currentType === 'expense' ? 'active-expense' : ''}`}
             >
               支出
             </button>
             <button
               type="button"
               onClick={() => { setCurrentType('income'); setSelectedCategory(null); }}
-              className={`type-btn income ${currentType === 'income' ? 'active' : ''}`}
+              className={`type-toggle-btn ${currentType === 'income' ? 'active-income' : ''}`}
             >
               収入
             </button>
           </div>
         </div>
 
-        {/* Category Grid */}
-        <div className="form-section">
-          <label>カテゴリ</label>
+        {/* Category Grid Card */}
+        <div className="card">
+          <div className="card-title">カテゴリ</div>
           <div className="category-grid">
             {categories.map((cat) => (
               <button
                 key={cat.id}
                 type="button"
                 onClick={() => setSelectedCategory(cat.name)}
-                className={`cat-btn ${selectedCategory === cat.name ? 'active' : ''}`}
+                className={`category-grid-btn ${selectedCategory === cat.name ? 'selected' : ''}`}
               >
                 <span className="cat-icon">{cat.icon}</span>
                 <span className="cat-name">{cat.name}</span>
@@ -193,39 +189,45 @@ export default function InputTab({
           </div>
         </div>
 
-        {/* Amount Input */}
-        <div className="form-section">
-          <label>金額</label>
-          <input
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0"
-            className="form-input"
-          />
+        {/* Amount Input Card */}
+        <div className="card">
+          <div className="form-group">
+            <label>金額</label>
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0"
+              className="form-input"
+            />
+          </div>
         </div>
 
-        {/* Date Input */}
-        <div className="form-section">
-          <label>日付</label>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="form-input"
-          />
+        {/* Date Input Card */}
+        <div className="card">
+          <div className="form-group">
+            <label>日付</label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="form-input"
+            />
+          </div>
         </div>
 
-        {/* Memo Input */}
-        <div className="form-section">
-          <label>メモ</label>
-          <input
-            type="text"
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-            placeholder="メモ（任意）"
-            className="form-input"
-          />
+        {/* Memo Input Card */}
+        <div className="card">
+          <div className="form-group">
+            <label>メモ</label>
+            <input
+              type="text"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              placeholder="メモ（任意）"
+              className="form-input"
+            />
+          </div>
         </div>
 
         {/* Submit Button */}
@@ -237,7 +239,7 @@ export default function InputTab({
           {isLoading ? '保存中...' : '登録'}
         </button>
 
-        {/* Receipt Upload Link */}
+        {/* Receipt Upload Button */}
         <button
           type="button"
           onClick={() => setShowReceiptUpload(true)}

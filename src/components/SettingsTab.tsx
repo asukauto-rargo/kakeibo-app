@@ -207,24 +207,26 @@ export default function SettingsTab({ settings, entries, currentMonth, onSetting
 
       <style>{`
         .settings-tab {
-          padding: 16px;
-          background: #f5f5f5;
-          min-height: 100vh;
+          padding: 0;
+          background: transparent;
         }
 
         .settings-card {
           background: white;
-          padding: 24px;
-          border-radius: 8px;
-          margin-bottom: 24px;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          padding: 20px;
+          border-radius: 12px;
+          margin-bottom: 12px;
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+          border: 1px solid rgba(0,0,0,0.04);
         }
 
         .settings-card h2 {
           margin: 0 0 20px 0;
-          font-size: 18px;
+          font-size: 15px;
           font-weight: 600;
-          color: #333;
+          color: #1a1a1a;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
         }
 
         .form-group {
@@ -251,8 +253,8 @@ export default function SettingsTab({ settings, entries, currentMonth, onSetting
 
         .text-input:focus {
           outline: none;
-          border-color: #3498DB;
-          box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+          border-color: #555;
+          box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
         }
 
         .targets-list {
@@ -308,8 +310,8 @@ export default function SettingsTab({ settings, entries, currentMonth, onSetting
 
         .number-input:focus {
           outline: none;
-          border-color: #3498DB;
-          box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+          border-color: #555;
+          box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
         }
 
         .input-unit {
@@ -321,20 +323,18 @@ export default function SettingsTab({ settings, entries, currentMonth, onSetting
         .save-button {
           width: 100%;
           padding: 12px 16px;
-          background: #3498DB;
-          color: #1a1a1a;
+          background: #1a1a1a;
+          color: #fff;
           border: none;
-          border-radius: 6px;
-          font-size: 16px;
+          border-radius: 8px;
+          font-size: 15px;
           font-weight: 600;
           cursor: pointer;
-          transition: all 0.3s ease;
+          transition: all 0.2s ease;
         }
 
         .save-button:hover:not(:disabled) {
-          background: #2980B9;
-          transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+          background: #333;
         }
 
         .save-button:disabled {
@@ -350,20 +350,19 @@ export default function SettingsTab({ settings, entries, currentMonth, onSetting
 
         .export-button {
           padding: 12px 16px;
-          background: #3498DB;
+          background: #fff;
           color: #1a1a1a;
-          border: none;
-          border-radius: 6px;
+          border: 1px solid #ddd;
+          border-radius: 8px;
           font-size: 14px;
           font-weight: 600;
           cursor: pointer;
-          transition: all 0.3s ease;
+          transition: all 0.2s ease;
         }
 
         .export-button:hover {
-          background: #2980B9;
-          transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+          background: #f5f5f5;
+          border-color: #aaa;
         }
 
         @media (max-width: 600px) {
