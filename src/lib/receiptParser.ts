@@ -23,8 +23,8 @@ export async function parseReceipt(
 
   onProgress?.(20);
 
-  // カテゴリ一覧を生成
-  const categoryList = EXPENSE_CATS.map((c) => c.name).join(', ');
+  // カテゴリ一覧を生成（IDと名前のペア）
+  const categoryList = EXPENSE_CATS.map((c) => `${c.name}（${c.icon}）`).join('、');
 
   // Claude API に送信
   const response = await fetch(CLAUDE_API_URL, {
@@ -37,7 +37,7 @@ export async function parseReceipt(
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 1024,
+      max_tokens: 2048,
       messages: [
         {
           role: 'user',
@@ -52,22 +52,28 @@ export async function parseReceipt(
             },
             {
               type: 'text',
-              text: `このレシート画像から、購入品目と金額を読み取ってください。
+              text: `あなたはレシート読み取りの専門家です。このレシート画像を注意深く読み取り、購入品目と金額を正確に抽出してください。
 
-以下のJSON形式で出力してください。JSONのみを出力し、説明文は不要です。
+## 重要な読み取りルール
+- OCRの誤読に注意：数字の0とO、1とl、8とBなどを区別してください
+- 金額は必ず正の整数にしてください（小数点以下は四捨五入）
+- 値引き・割引行は除外してください
+- 「小計」「合計」「税」「消費税」「内税」「外税」「お預かり」「お釣り」「釣銭」行は必ず除外してください
+- 品目名が途中で切れている場合は、読み取れる範囲で記載してください
+- 同じ品目が複数ある場合（例: ×2）は、1品目の金額に個数を掛けた合計を金額としてください
+
+## 出力形式
+以下のJSON配列のみを出力してください。説明文やマークダウンは不要です。
 
 [
-  {"name": "品目名", "amount": 金額（数値）, "category": "カテゴリ名"}
+  {"name": "品目名（レシートに記載された通り）", "amount": 金額, "category": "カテゴリ名"}
 ]
 
-カテゴリは以下から最も適切なものを選んでください：
+## カテゴリ一覧（この中から最も適切なものを選んでください）
 ${categoryList}
 
-注意：
-- 小計、合計、税、お預かり、お釣りなどは除外してください
-- 金額は正の整数で記載してください
-- 品目名はレシートに記載されている通りに記載してください
-- レシートが読み取れない場合は空の配列 [] を返してください`,
+判別に迷う場合は「その他」を選んでください。
+レシートが不鮮明で読み取れない場合は空の配列 [] を返してください。`,
             },
           ],
         },
@@ -115,7 +121,6 @@ function fileToBase64(file: File): Promise<string> {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      // "data:image/png;base64,..." から base64 部分だけ取り出す
       const base64 = result.split(',')[1];
       resolve(base64);
     };

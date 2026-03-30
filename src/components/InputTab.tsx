@@ -117,8 +117,6 @@ export default function InputTab({
     }
   };
 
-  const userColors = ['#3498DB', '#E91E63', '#9B59B6'];
-
   return (
     <div className="input-tab">
       {showReceiptUpload && (
@@ -133,7 +131,7 @@ export default function InputTab({
       {toast && <div className="toast show">{toast}</div>}
 
       <form onSubmit={handleSubmit}>
-        {/* User Selection Card */}
+        {/* User Selection */}
         <div className="card">
           <div className="card-title">入力者</div>
           <div className="user-toggle">
@@ -150,7 +148,7 @@ export default function InputTab({
           </div>
         </div>
 
-        {/* Type Selection Card */}
+        {/* Type Selection */}
         <div className="card">
           <div className="card-title">種類</div>
           <div className="type-toggle">
@@ -171,7 +169,7 @@ export default function InputTab({
           </div>
         </div>
 
-        {/* Category Grid Card */}
+        {/* Category Grid */}
         <div className="card">
           <div className="card-title">カテゴリ</div>
           <div className="category-grid">
@@ -189,9 +187,9 @@ export default function InputTab({
           </div>
         </div>
 
-        {/* Amount Input Card */}
+        {/* Amount, Memo, Date - compact */}
         <div className="card">
-          <div className="form-group">
+          <div className="form-group" style={{ marginBottom: 8 }}>
             <label>金額</label>
             <input
               type="number"
@@ -201,36 +199,30 @@ export default function InputTab({
               className="form-input"
             />
           </div>
-        </div>
-
-        {/* Date Input Card */}
-        <div className="card">
-          <div className="form-group">
-            <label>日付</label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="form-input"
-            />
+          <div className="compact-fields">
+            <div className="form-group">
+              <label>メモ</label>
+              <input
+                type="text"
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                placeholder="任意"
+                className="form-input"
+              />
+            </div>
+            <div className="form-group">
+              <label>日付</label>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="form-input"
+              />
+            </div>
           </div>
         </div>
 
-        {/* Memo Input Card */}
-        <div className="card">
-          <div className="form-group">
-            <label>メモ</label>
-            <input
-              type="text"
-              value={memo}
-              onChange={(e) => setMemo(e.target.value)}
-              placeholder="メモ（任意）"
-              className="form-input"
-            />
-          </div>
-        </div>
-
-        {/* Submit Button */}
+        {/* Submit */}
         <button
           type="submit"
           disabled={isLoading}
@@ -239,13 +231,13 @@ export default function InputTab({
           {isLoading ? '保存中...' : '登録'}
         </button>
 
-        {/* Receipt Upload Button */}
+        {/* Receipt */}
         <button
           type="button"
           onClick={() => setShowReceiptUpload(true)}
           className="receipt-btn"
         >
-          📷 レシートから入力
+          レシートから入力
         </button>
       </form>
     </div>

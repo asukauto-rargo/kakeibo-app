@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { parseReceipt } from '../lib/receiptParser';
-import { EXPENSE_CATS } from '../constants';
+import { EXPENSE_CATS, findCat } from '../constants';
 import type { ParsedReceiptItem } from '../types';
 
 interface ReceiptUploadProps {
@@ -23,6 +23,7 @@ export default function ReceiptUpload({
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -54,7 +55,6 @@ export default function ReceiptUpload({
     setProgress(0);
 
     try {
-      // Upload to Supabase Storage
       const [year, month] = currentDate.split('-');
       const timestamp = Date.now();
       const filename = `${timestamp}_${selectedFile.name}`;
@@ -65,12 +65,11 @@ export default function ReceiptUpload({
         .upload(storagePath, selectedFile);
 
       if (uploadError) {
-        console.warn('Storage upload failed (bucket may not exist):', uploadError.message);
+        console.warn('Storage upload failed:', uploadError.message);
       }
 
       setProgress(30);
 
-      // Run OCR with the actual File object
       const parsedItems = await parseReceipt(selectedFile, (p) => {
         setProgress(30 + Math.round(p * 0.6));
       });
@@ -79,8 +78,6 @@ export default function ReceiptUpload({
         showToast('レシートから品目を検出できませんでした');
         setItems([]);
       } else {
-        // Claude APIはカテゴリ名を直接返すのでそのまま使用
-        // 不明なカテゴリは「その他」にフォールバック
         const validCatNames = EXPENSE_CATS.map((c) => c.name);
         const itemsNormalized = parsedItems.map((item) => ({
           ...item,
@@ -99,12 +96,9 @@ export default function ReceiptUpload({
     }
   };
 
-  const handleAddItem = () => {
-    setItems([...items, { name: '', amount: 0, category: EXPENSE_CATS[0].name }]);
-  };
-
   const handleRemoveItem = (index: number) => {
     setItems(items.filter((_, i) => i !== index));
+    if (editingIndex === index) setEditingIndex(null);
   };
 
   const handleUpdateItem = (index: number, field: keyof ParsedReceiptItem, value: string | number) => {
@@ -117,6 +111,22 @@ export default function ReceiptUpload({
     setItems(updatedItems);
   };
 
+  // カテゴリ別にグループ化
+  const groupedItems = useMemo(() => {
+    const groups: Record<string, { items: (ParsedReceiptItem & { originalIndex: number })[]; total: number }> = {};
+    items.forEach((item, i) => {
+      const cat = item.category;
+      if (!groups[cat]) {
+        groups[cat] = { items: [], total: 0 };
+      }
+      groups[cat].items.push({ ...item, originalIndex: i });
+      groups[cat].total += item.amount;
+    });
+    return groups;
+  }, [items]);
+
+  const totalAmount = items.reduce((sum, item) => sum + item.amount, 0);
+
   const handleConfirm = () => {
     const validItems = items.filter((item) => item.name && item.amount > 0);
     if (validItems.length === 0) {
@@ -124,6 +134,11 @@ export default function ReceiptUpload({
       return;
     }
     onItemsParsed(validItems);
+  };
+
+  const getCategoryIcon = (catName: string) => {
+    const cat = findCat(catName);
+    return cat?.icon || '📦';
   };
 
   return (
@@ -134,12 +149,17 @@ export default function ReceiptUpload({
           <button onClick={onClose} className="close-btn">✕</button>
         </div>
 
-        {toast && <div className="toast">{toast}</div>}
+        {toast && <div style={{
+          background: '#1a1a1a', color: '#fff', padding: '8px 16px',
+          borderRadius: 8, fontSize: 13, textAlign: 'center', marginBottom: 12
+        }}>{toast}</div>}
 
         {/* File Input */}
         {!preview && (
           <div className="receipt-section">
-            <label>レシート画像を選択</label>
+            <label style={{ fontSize: 13, color: '#666', marginBottom: 8, display: 'block' }}>
+              レシート画像を選択
+            </label>
             <input
               type="file"
               accept="image/*"
@@ -153,11 +173,12 @@ export default function ReceiptUpload({
         {/* Image Preview */}
         {preview && (
           <div className="receipt-section">
-            <img src={preview} alt="レシートプレビュー" className="receipt-preview" />
+            <img src={preview} alt="レシート" className="receipt-preview" />
             <button
               type="button"
               onClick={() => { setPreview(null); setSelectedFile(null); setItems([]); }}
               className="btn-secondary"
+              style={{ fontSize: 12 }}
             >
               画像を変更
             </button>
@@ -166,7 +187,7 @@ export default function ReceiptUpload({
 
         {/* Process Button */}
         {preview && items.length === 0 && !isProcessing && (
-          <button onClick={handleUploadAndParse} className="receipt-btn">
+          <button onClick={handleUploadAndParse} className="btn-add" style={{ marginBottom: 12 }}>
             レシートを読み取る
           </button>
         )}
@@ -175,53 +196,85 @@ export default function ReceiptUpload({
         {isProcessing && (
           <div className="receipt-section">
             <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${progress}%`, backgroundColor: '#F39C12' }} />
+              <div className="progress-fill" style={{ width: `${progress}%`, backgroundColor: '#1a1a1a' }} />
             </div>
-            <p style={{ textAlign: 'center', fontSize: 13, color: '#666', marginTop: 8 }}>
+            <p style={{ textAlign: 'center', fontSize: 12, color: '#666', marginTop: 8 }}>
               読み取り中... {progress}%
             </p>
           </div>
         )}
 
-        {/* Items List */}
+        {/* Items - Grouped by Category */}
         {items.length > 0 && (
           <div className="receipt-section">
             <div className="receipt-items-header">
               <h3>読取結果 ({items.length}件)</h3>
-              <button onClick={handleAddItem} className="btn-secondary">+ 追加</button>
+              <span style={{ fontSize: 15, fontWeight: 700 }}>合計 ¥{totalAmount.toLocaleString()}</span>
             </div>
 
-            {items.map((item, index) => (
-              <div key={index} className="receipt-item-row">
-                <input
-                  type="text"
-                  value={item.name}
-                  onChange={(e) => handleUpdateItem(index, 'name', e.target.value)}
-                  placeholder="品目名"
-                  className="form-input"
-                  style={{ flex: 1 }}
-                />
-                <input
-                  type="number"
-                  value={item.amount || ''}
-                  onChange={(e) => handleUpdateItem(index, 'amount', e.target.value)}
-                  placeholder="金額"
-                  className="form-input"
-                  style={{ width: 80 }}
-                />
-                <select
-                  value={item.category}
-                  onChange={(e) => handleUpdateItem(index, 'category', e.target.value)}
-                  className="form-input"
-                  style={{ width: 100 }}
-                >
-                  {EXPENSE_CATS.map((cat) => (
-                    <option key={cat.id} value={cat.name}>{cat.name}</option>
-                  ))}
-                </select>
-                <button onClick={() => handleRemoveItem(index)} className="btn-delete">✕</button>
+            {Object.entries(groupedItems).map(([catName, group]) => (
+              <div key={catName} className="receipt-cat-group">
+                <div className="receipt-cat-title">
+                  <h4>{getCategoryIcon(catName)} {catName}</h4>
+                  <span className="cat-total">¥{group.total.toLocaleString()}</span>
+                </div>
+                {group.items.map((item) => (
+                  <div key={item.originalIndex}>
+                    {editingIndex === item.originalIndex ? (
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center', padding: '4px 0' }}>
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) => handleUpdateItem(item.originalIndex, 'name', e.target.value)}
+                          className="form-input"
+                          style={{ flex: 1, fontSize: 12, padding: '4px 6px' }}
+                        />
+                        <input
+                          type="number"
+                          value={item.amount || ''}
+                          onChange={(e) => handleUpdateItem(item.originalIndex, 'amount', e.target.value)}
+                          className="form-input"
+                          style={{ width: 70, fontSize: 12, padding: '4px 6px', textAlign: 'right' }}
+                        />
+                        <select
+                          value={item.category}
+                          onChange={(e) => handleUpdateItem(item.originalIndex, 'category', e.target.value)}
+                          className="form-input"
+                          style={{ width: 80, fontSize: 11, padding: '4px 4px' }}
+                        >
+                          {EXPENSE_CATS.map((cat) => (
+                            <option key={cat.id} value={cat.name}>{cat.name}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => setEditingIndex(null)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#3B82F6', fontWeight: 600 }}
+                        >
+                          OK
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="receipt-cat-item" onClick={() => setEditingIndex(item.originalIndex)} style={{ cursor: 'pointer' }}>
+                        <span>{item.name}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          ¥{item.amount.toLocaleString()}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleRemoveItem(item.originalIndex); }}
+                            style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: 12 }}
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             ))}
+
+            <p style={{ fontSize: 10, color: '#999', marginTop: 8, textAlign: 'center' }}>
+              品目をタップすると編集できます
+            </p>
           </div>
         )}
 
@@ -229,7 +282,9 @@ export default function ReceiptUpload({
         <div className="receipt-actions">
           <button onClick={onClose} className="btn-secondary">キャンセル</button>
           {items.length > 0 && (
-            <button onClick={handleConfirm} className="btn-add">確定</button>
+            <button onClick={handleConfirm} className="btn-add">
+              {items.length}件を登録
+            </button>
           )}
         </div>
       </div>

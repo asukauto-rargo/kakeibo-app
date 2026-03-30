@@ -1,16 +1,16 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { EXPENSE_CATS } from '../constants';
-import type { Entry, Settings } from '../types';
+import type { Settings } from '../types';
 
 interface SettingsTabProps {
   settings: Settings;
-  entries: Entry[];
+  entries: never[];
   currentMonth: string;
   onSettingsChanged: (s: Settings) => void;
 }
 
-export default function SettingsTab({ settings, entries, currentMonth, onSettingsChanged }: SettingsTabProps) {
+export default function SettingsTab({ settings, onSettingsChanged }: SettingsTabProps) {
   const [user1Name, setUser1Name] = useState(settings.user1Name || '');
   const [user2Name, setUser2Name] = useState(settings.user2Name || '');
   const [user3Name, setUser3Name] = useState(settings.user3Name || '');
@@ -20,7 +20,6 @@ export default function SettingsTab({ settings, entries, currentMonth, onSetting
   const [savingNames, setSavingNames] = useState(false);
   const [savingTargets, setSavingTargets] = useState(false);
 
-  // Save user names
   const handleSaveNames = async () => {
     setSavingNames(true);
     try {
@@ -44,7 +43,6 @@ export default function SettingsTab({ settings, entries, currentMonth, onSetting
     }
   };
 
-  // Save monthly targets
   const handleSaveTargets = async () => {
     setSavingTargets(true);
     try {
@@ -64,104 +62,67 @@ export default function SettingsTab({ settings, entries, currentMonth, onSetting
     }
   };
 
-  // CSV export current month
-  const handleExportCurrentMonth = () => {
-    const monthEntries = entries.filter((e) => e.date.startsWith(currentMonth));
-    exportToCSV(monthEntries, `kakeibo_${currentMonth}.csv`);
-  };
-
-  // CSV export all
-  const handleExportAll = () => {
-    exportToCSV(entries, 'kakeibo_all.csv');
-  };
-
-  // CSV export helper
-  const exportToCSV = (data: Entry[], filename: string) => {
-    const BOM = '\uFEFF';
-    const headers = ['日付', '種類', 'カテゴリ', '金額', '入力者', 'メモ'];
-    const rows = data.map((entry) => [
-      entry.date,
-      entry.type === 'expense' ? '支出' : '収入',
-      entry.category,
-      entry.amount,
-      entry.user_name || '',
-      entry.memo || '',
-    ]);
-
-    const csv = BOM + [headers, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(',')).join('\n');
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', filename);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   const handleTargetChange = (catId: string, value: string) => {
     const numValue = parseInt(value, 10) || 0;
-    setMonthlyTargets({
-      ...monthlyTargets,
-      [catId]: numValue,
-    });
+    setMonthlyTargets({ ...monthlyTargets, [catId]: numValue });
   };
 
   return (
     <div className="settings-tab">
-      {/* Card 1: User names */}
+      {/* User names */}
       <div className="settings-card">
         <h2>ユーザー名</h2>
-        <div className="form-group">
-          <label>ユーザー1名</label>
+        <div className="settings-form-group">
+          <label>ユーザー1</label>
           <input
             type="text"
             value={user1Name}
             onChange={(e) => setUser1Name(e.target.value)}
             placeholder="例: 太郎"
-            className="text-input"
+            className="settings-input"
+            style={{ borderLeft: '3px solid #3B82F6' }}
           />
         </div>
-        <div className="form-group">
-          <label>ユーザー2名</label>
+        <div className="settings-form-group">
+          <label>ユーザー2</label>
           <input
             type="text"
             value={user2Name}
             onChange={(e) => setUser2Name(e.target.value)}
             placeholder="例: 花子"
-            className="text-input"
+            className="settings-input"
+            style={{ borderLeft: '3px solid #EF4444' }}
           />
         </div>
-        <div className="form-group">
-          <label>ユーザー3名</label>
+        <div className="settings-form-group">
+          <label>ユーザー3</label>
           <input
             type="text"
             value={user3Name}
             onChange={(e) => setUser3Name(e.target.value)}
             placeholder="例: 次郎"
-            className="text-input"
+            className="settings-input"
+            style={{ borderLeft: '3px solid #8B5CF6' }}
           />
         </div>
         <button
           onClick={handleSaveNames}
           disabled={savingNames}
-          className="save-button"
+          className="settings-btn"
         >
           {savingNames ? '保存中...' : '名前を保存'}
         </button>
       </div>
 
-      {/* Card 2: Monthly targets */}
+      {/* Monthly targets */}
       <div className="settings-card">
-        <h2>カテゴリ別 月間目標支出額</h2>
+        <h2>カテゴリ別 月間目標</h2>
         <div className="targets-list">
           {EXPENSE_CATS.map((cat) => (
             <div key={cat.id} className="target-input-row">
               <div className="cat-label">
                 <span className="cat-icon">{cat.icon}</span>
-                <span className="cat-name">{cat.name}</span>
+                <span className="cat-label-text">{cat.name}</span>
               </div>
               <div className="input-wrapper">
                 <input
@@ -180,206 +141,136 @@ export default function SettingsTab({ settings, entries, currentMonth, onSetting
         <button
           onClick={handleSaveTargets}
           disabled={savingTargets}
-          className="save-button"
+          className="settings-btn"
         >
           {savingTargets ? '保存中...' : '目標を保存'}
         </button>
       </div>
 
-      {/* Card 3: Data management */}
-      <div className="settings-card">
-        <h2>データ管理</h2>
-        <div className="export-buttons">
-          <button
-            onClick={handleExportCurrentMonth}
-            className="export-button"
-          >
-            CSV エクスポート（当月）
-          </button>
-          <button
-            onClick={handleExportAll}
-            className="export-button"
-          >
-            CSV エクスポート（全期間）
-          </button>
-        </div>
-      </div>
-
       <style>{`
         .settings-tab {
           padding: 0;
-          background: transparent;
         }
-
         .settings-card {
           background: white;
-          padding: 20px;
-          border-radius: 12px;
-          margin-bottom: 12px;
+          padding: 18px;
+          border-radius: 10px;
+          margin-bottom: 10px;
           box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
           border: 1px solid rgba(0,0,0,0.04);
         }
-
         .settings-card h2 {
-          margin: 0 0 20px 0;
-          font-size: 15px;
+          margin: 0 0 16px 0;
+          font-size: 14px;
           font-weight: 600;
           color: #1a1a1a;
+        }
+        .settings-form-group {
+          margin-bottom: 12px;
+        }
+        .settings-form-group label {
+          display: block;
+          font-size: 11px;
+          font-weight: 600;
+          color: #999;
+          margin-bottom: 4px;
           text-transform: uppercase;
           letter-spacing: 0.5px;
         }
-
-        .form-group {
-          margin-bottom: 16px;
-        }
-
-        .form-group label {
-          display: block;
-          font-size: 14px;
-          font-weight: 500;
-          color: #666;
-          margin-bottom: 8px;
-        }
-
-        .text-input {
+        .settings-input {
           width: 100%;
-          padding: 12px;
-          border: 1px solid #ddd;
-          border-radius: 6px;
+          padding: 10px 12px;
+          border: 1px solid #e2e5ea;
+          border-radius: 8px;
           font-size: 14px;
           box-sizing: border-box;
           font-family: inherit;
+          transition: border-color 0.2s;
         }
-
-        .text-input:focus {
+        .settings-input:focus {
           outline: none;
           border-color: #555;
-          box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
         }
-
         .targets-list {
-          margin-bottom: 20px;
+          margin-bottom: 16px;
         }
-
         .target-input-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 12px 0;
+          padding: 10px 0;
           border-bottom: 1px solid #f0f0f0;
         }
-
         .target-input-row:last-child {
           border-bottom: none;
         }
-
         .cat-label {
           display: flex;
           align-items: center;
           gap: 8px;
           flex: 1;
         }
-
         .cat-icon {
-          font-size: 20px;
-          width: 24px;
+          font-size: 18px;
+          width: 22px;
           text-align: center;
         }
-
-        .cat-name {
-          font-size: 14px;
+        .cat-label-text {
+          font-size: 13px;
           color: #333;
           font-weight: 500;
         }
-
         .input-wrapper {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 6px;
         }
-
         .number-input {
-          width: 120px;
-          padding: 8px;
-          border: 1px solid #ddd;
+          width: 100px;
+          padding: 6px 8px;
+          border: 1px solid #e2e5ea;
           border-radius: 6px;
-          font-size: 14px;
+          font-size: 13px;
           text-align: right;
           font-family: inherit;
         }
-
         .number-input:focus {
           outline: none;
           border-color: #555;
-          box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
         }
-
         .input-unit {
-          font-size: 12px;
+          font-size: 11px;
           color: #999;
-          width: 24px;
+          width: 20px;
         }
-
-        .save-button {
+        .settings-btn {
           width: 100%;
-          padding: 12px 16px;
+          padding: 11px 16px;
           background: #1a1a1a;
           color: #fff;
           border: none;
           border-radius: 8px;
-          font-size: 15px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .save-button:hover:not(:disabled) {
-          background: #333;
-        }
-
-        .save-button:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .export-buttons {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
-        }
-
-        .export-button {
-          padding: 12px 16px;
-          background: #fff;
-          color: #1a1a1a;
-          border: 1px solid #ddd;
-          border-radius: 8px;
           font-size: 14px;
           font-weight: 600;
           cursor: pointer;
-          transition: all 0.2s ease;
+          transition: background 0.2s;
         }
-
-        .export-button:hover {
-          background: #f5f5f5;
-          border-color: #aaa;
+        .settings-btn:hover:not(:disabled) {
+          background: #333;
         }
-
+        .settings-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
         @media (max-width: 600px) {
-          .export-buttons {
-            grid-template-columns: 1fr;
-          }
-
           .target-input-row {
             flex-direction: column;
             align-items: flex-start;
-            gap: 8px;
+            gap: 6px;
           }
-
           .input-wrapper {
             width: 100%;
           }
-
           .number-input {
             width: 100%;
           }
