@@ -30,7 +30,6 @@ function halfToFullKana(str: string): string {
     const next = str[i + 1];
     if (kanaMap[ch]) {
       let converted = kanaMap[ch];
-      // 濁点・半濁点の結合
       if (next === 'ﾞ' || next === '\u3099') {
         const dakutenMap: Record<string, string> = {
           'カ':'ガ','キ':'ギ','ク':'グ','ケ':'ゲ','コ':'ゴ',
@@ -41,7 +40,7 @@ function halfToFullKana(str: string): string {
         };
         if (dakutenMap[converted]) {
           converted = dakutenMap[converted];
-          i++; // skip next
+          i++;
         }
       } else if (next === 'ﾟ' || next === '\u309A') {
         const handakutenMap: Record<string, string> = {
@@ -61,6 +60,41 @@ function halfToFullKana(str: string): string {
 }
 
 /**
+ * 画像ファイルをJPEG形式に変換する（HEIC/HEIF等の非対応形式対策）
+ * Canvasを使ってブラウザ側でJPEGにレンダリングする
+ */
+function convertToJpeg(file: File): Promise<{ base64: string; mediaType: 'image/jpeg' }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      // 最大幅2000pxにリサイズ（API送信サイズ削減 + 精度向上）
+      const maxW = 2000;
+      let w = img.width;
+      let h = img.height;
+      if (w > maxW) {
+        h = Math.round(h * (maxW / w));
+        w = maxW;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      const base64 = dataUrl.split(',')[1];
+      URL.revokeObjectURL(url);
+      resolve({ base64, mediaType: 'image/jpeg' });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('画像の読み込みに失敗しました'));
+    };
+    img.src = url;
+  });
+}
+
+/**
  * レシート画像をClaude APIで解析し、品目と金額をパースする
  */
 export async function parseReceipt(
@@ -74,9 +108,22 @@ export async function parseReceipt(
 
   onProgress?.(10);
 
-  // 画像をBase64に変換
-  const base64 = await fileToBase64(imageFile);
-  const mediaType = imageFile.type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+  // 画像を常にJPEGに変換（HEIC/HEIF等の非対応形式にも対応）
+  let base64: string;
+  let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+
+  const supportedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  if (supportedTypes.includes(imageFile.type)) {
+    // 対応形式でもCanvasでJPEGに変換（サイズ最適化）
+    const converted = await convertToJpeg(imageFile);
+    base64 = converted.base64;
+    mediaType = converted.mediaType;
+  } else {
+    // HEIC/HEIF等 → Canvas経由でJPEGに変換
+    const converted = await convertToJpeg(imageFile);
+    base64 = converted.base64;
+    mediaType = converted.mediaType;
+  }
 
   onProgress?.(20);
 
@@ -213,20 +260,4 @@ ${categoryList}
     console.error('Failed to parse Claude response:', text);
     return [];
   }
-}
-
-/**
- * File → Base64文字列（data: prefix なし）
- */
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(',')[1];
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 }

@@ -97,8 +97,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Yu Gothic',sa
 .btn-secondary{padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;font-size:12px;color:var(--text-secondary);width:100%;font-weight:500;transition:all .2s}
 .btn-secondary:hover{background:var(--bg);color:var(--dark)}
 .entry-list{margin-top:4px}
-.entry-item{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #f0f0f0}
-.entry-item:last-child{border:none}
+.entry-item{display:flex;align-items:flex-start;gap:10px;padding:10px 8px;margin-bottom:6px;background:#fafafa;border-radius:8px;border:1px solid #eee}
 .entry-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
 .entry-detail{flex:1;min-width:0}
 .entry-cat{font-size:13px;font-weight:600;color:var(--dark);margin-bottom:1px}
@@ -193,6 +192,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Yu Gothic',sa
 .receipt-cat-title .cat-total{font-size:14px;font-weight:700;color:var(--red)}
 .receipt-cat-item{display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:var(--text-secondary)}
 .receipt-cat-item span:last-child{font-weight:600;color:var(--text)}
+.receipt-source-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 8px;border:2px solid var(--border);border-radius:var(--radius);background:#fff;cursor:pointer;font-size:13px;font-weight:500;color:var(--text);transition:all .2s}
+.receipt-source-btn:hover{background:var(--bg);border-color:#999}
+.receipt-source-btn:active{transform:scale(0.97)}
 
 /* ===== Receipt Detail Expand (List Tab) ===== */
 .receipt-detail-expand{background:#fafafa;border:1px solid #f0f0f0;border-top:none;border-radius:0 0 8px 8px;padding:8px 12px;margin-bottom:4px}

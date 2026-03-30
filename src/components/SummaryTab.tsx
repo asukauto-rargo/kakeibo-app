@@ -244,26 +244,19 @@ export default function SummaryTab({ entries, settings, currentMonth }: SummaryT
   const totalAmount = filteredEntries.reduce((sum, entry) => sum + entry.amount, 0);
   const categories = type === 'expense' ? EXPENSE_CATS : INCOME_CATS;
 
-  // Build chart segments with clear gaps
+  // Build chart segments (no gaps, flush together)
   const segments = useMemo(() => {
     if (totalAmount === 0) return [];
     const result: { catId: string; catName: string; icon: string; color: string; amount: number; pct: number; startAngle: number; endAngle: number }[] = [];
     let currentAngle = -Math.PI / 2;
-    const GAP = 0.06; // visible gap between segments
 
-    const activeSegs = categories.filter((cat) => (catTotals[cat.id] || 0) > 0);
-    const gapCount = activeSegs.length > 1 ? activeSegs.length : 0;
-    const totalGap = GAP * gapCount;
-    const availableAngle = 2 * Math.PI - totalGap;
-
-    activeSegs.forEach((cat) => {
+    categories.forEach((cat) => {
       const amount = catTotals[cat.id] || 0;
       if (amount === 0) return;
       const pct = amount / totalAmount;
-      const sliceAngle = pct * availableAngle;
-      if (sliceAngle <= 0.01) return;
+      const sliceAngle = pct * 2 * Math.PI;
+      if (sliceAngle <= 0.005) return;
 
-      const halfGap = gapCount > 0 ? GAP / 2 : 0;
       result.push({
         catId: cat.id,
         catName: cat.name,
@@ -271,10 +264,10 @@ export default function SummaryTab({ entries, settings, currentMonth }: SummaryT
         color: CAT_COLORS[cat.id] || '#999',
         amount,
         pct,
-        startAngle: currentAngle + halfGap,
-        endAngle: currentAngle + halfGap + sliceAngle,
+        startAngle: currentAngle,
+        endAngle: currentAngle + sliceAngle,
       });
-      currentAngle += sliceAngle + (gapCount > 0 ? GAP : 0);
+      currentAngle += sliceAngle;
     });
     return result;
   }, [catTotals, totalAmount, categories]);

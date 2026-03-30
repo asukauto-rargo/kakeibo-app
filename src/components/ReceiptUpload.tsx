@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { parseReceipt } from '../lib/receiptParser';
 import { EXPENSE_CATS, findCat } from '../constants';
@@ -24,6 +24,10 @@ export default function ReceiptUpload({
   const [progress, setProgress] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
+
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -34,12 +38,14 @@ export default function ReceiptUpload({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
+    // 画像ファイルかチェック（HEIC等も受け付ける）
+    if (!file.type.startsWith('image/') && !file.name.match(/\.(heic|heif)$/i)) {
       showToast('画像ファイルを選択してください');
       return;
     }
 
     setSelectedFile(file);
+    setErrorDetail(null);
     const reader = new FileReader();
     reader.onload = (event) => setPreview(event.target?.result as string);
     reader.readAsDataURL(file);
@@ -53,6 +59,7 @@ export default function ReceiptUpload({
 
     setIsProcessing(true);
     setProgress(0);
+    setErrorDetail(null);
 
     try {
       const [year, month] = currentDate.split('-');
@@ -89,6 +96,8 @@ export default function ReceiptUpload({
       setProgress(100);
     } catch (error) {
       console.error('Error processing receipt:', error);
+      const msg = error instanceof Error ? error.message : String(error);
+      setErrorDetail(msg);
       showToast('レシート処理に失敗しました');
       setItems([]);
     } finally {
@@ -141,6 +150,16 @@ export default function ReceiptUpload({
     return cat?.icon || '📦';
   };
 
+  const resetFile = () => {
+    setPreview(null);
+    setSelectedFile(null);
+    setItems([]);
+    setErrorDetail(null);
+    // inputをリセット
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
+    if (galleryInputRef.current) galleryInputRef.current.value = '';
+  };
+
   return (
     <div className="receipt-overlay">
       <div className="receipt-modal">
@@ -154,19 +173,44 @@ export default function ReceiptUpload({
           borderRadius: 8, fontSize: 13, textAlign: 'center', marginBottom: 12
         }}>{toast}</div>}
 
-        {/* File Input */}
+        {/* Hidden file inputs */}
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleFileSelect}
+          style={{ display: 'none' }}
+        />
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept="image/*,.heic,.heif"
+          onChange={handleFileSelect}
+          style={{ display: 'none' }}
+        />
+
+        {/* Source Selection Buttons */}
         {!preview && (
           <div className="receipt-section">
-            <label style={{ fontSize: 13, color: '#666', marginBottom: 8, display: 'block' }}>
-              レシート画像を選択
-            </label>
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={handleFileSelect}
-              className="form-input"
-            />
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                className="receipt-source-btn"
+              >
+                <span style={{ fontSize: 24 }}>&#128247;</span>
+                <span>カメラで撮影</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => galleryInputRef.current?.click()}
+                className="receipt-source-btn"
+              >
+                <span style={{ fontSize: 24 }}>&#128444;&#65039;</span>
+                <span>写真から選択</span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -176,12 +220,22 @@ export default function ReceiptUpload({
             <img src={preview} alt="レシート" className="receipt-preview" />
             <button
               type="button"
-              onClick={() => { setPreview(null); setSelectedFile(null); setItems([]); }}
+              onClick={resetFile}
               className="btn-secondary"
               style={{ fontSize: 12 }}
             >
               画像を変更
             </button>
+          </div>
+        )}
+
+        {/* Error Detail */}
+        {errorDetail && (
+          <div style={{
+            background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8,
+            padding: '8px 12px', fontSize: 11, color: '#B91C1C', marginBottom: 12, wordBreak: 'break-all'
+          }}>
+            {errorDetail}
           </div>
         )}
 
