@@ -218,9 +218,58 @@ function DailyChart({
   );
 }
 
+/** Mini donut for user breakdown */
+function MiniDonut({
+  segments,
+  size,
+  radius,
+  strokeWidth,
+}: {
+  segments: { catId: string; color: string; startAngle: number; endAngle: number }[];
+  size: number;
+  radius: number;
+  strokeWidth: number;
+}) {
+  const cx = size / 2;
+  const cy = size / 2;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <circle cx={cx} cy={cy} r={radius} fill="none" stroke="#f0f0f0" strokeWidth={strokeWidth} />
+      {segments.map((seg) => {
+        const angle = seg.endAngle - seg.startAngle;
+        if (angle <= 0) return null;
+        const largeArc = angle > Math.PI ? 1 : 0;
+        const x1 = cx + radius * Math.cos(seg.startAngle);
+        const y1 = cy + radius * Math.sin(seg.startAngle);
+        const x2 = cx + radius * Math.cos(seg.endAngle);
+        const y2 = cy + radius * Math.sin(seg.endAngle);
+        return (
+          <path
+            key={seg.catId}
+            d={`M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`}
+            fill="none"
+            stroke={seg.color}
+            strokeWidth={strokeWidth}
+            strokeLinecap="butt"
+            opacity="0.88"
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
 export default function SummaryTab({ entries, settings, currentMonth }: SummaryTabProps) {
   const [type, setType] = useState<'expense' | 'income'>('expense');
   const [hoveredCat, setHoveredCat] = useState<string | null>(null);
+  const [selectedUser, setSelectedUser] = useState<string>('全員');
+
+  const USER_COLORS = ['#3B82F6', '#EF4444', '#8B5CF6'];
+  const userNames = [
+    settings.user1Name || 'ユーザー1',
+    settings.user2Name || 'ユーザー2',
+    settings.user3Name || 'ユーザー3',
+  ];
 
   const resolveUserName = (raw: string) => {
     if (!raw) return '';
@@ -231,20 +280,30 @@ export default function SummaryTab({ entries, settings, currentMonth }: SummaryT
     return raw;
   };
 
-  const filteredEntries = entries.filter((entry) =>
-    entry.date?.startsWith(currentMonth) && entry.type === type
+  const filteredEntries = useMemo(() =>
+    entries.filter((entry) =>
+      entry.date?.startsWith(currentMonth) && entry.type === type
+    ),
+    [entries, currentMonth, type]
   );
 
+  // Further filter by selected user for charts
+  const userFilteredEntries = useMemo(() => {
+    if (selectedUser === '全員') return filteredEntries;
+    return filteredEntries.filter((e) => resolveUserName(e.user_name) === selectedUser);
+  }, [filteredEntries, selectedUser]);
+
   const catTotals: Record<string, number> = {};
-  for (const entry of filteredEntries) {
+  for (const entry of userFilteredEntries) {
     const id = catToId(entry.category) || entry.category;
     catTotals[id] = (catTotals[id] || 0) + entry.amount;
   }
 
-  const totalAmount = filteredEntries.reduce((sum, entry) => sum + entry.amount, 0);
+  const totalAmount = userFilteredEntries.reduce((sum, entry) => sum + entry.amount, 0);
+  const overallTotal = filteredEntries.reduce((sum, entry) => sum + entry.amount, 0);
   const categories = type === 'expense' ? EXPENSE_CATS : INCOME_CATS;
 
-  // Build chart segments (no gaps, flush together)
+  // Build chart segments
   const segments = useMemo(() => {
     if (totalAmount === 0) return [];
     const result: { catId: string; catName: string; icon: string; color: string; amount: number; pct: number; startAngle: number; endAngle: number }[] = [];
@@ -272,15 +331,43 @@ export default function SummaryTab({ entries, settings, currentMonth }: SummaryT
     return result;
   }, [catTotals, totalAmount, categories]);
 
-  const user1Total = filteredEntries
-    .filter((e) => resolveUserName(e.user_name) === settings.user1Name)
-    .reduce((sum, e) => sum + e.amount, 0);
-  const user2Total = filteredEntries
-    .filter((e) => resolveUserName(e.user_name) === settings.user2Name)
-    .reduce((sum, e) => sum + e.amount, 0);
-  const user3Total = filteredEntries
-    .filter((e) => resolveUserName(e.user_name) === settings.user3Name)
-    .reduce((sum, e) => sum + e.amount, 0);
+  // Per-user totals and mini-donut data
+  const userBreakdowns = useMemo(() => {
+    return userNames.map((name, idx) => {
+      const userEntries = filteredEntries.filter((e) => resolveUserName(e.user_name) === name);
+      const total = userEntries.reduce((sum, e) => sum + e.amount, 0);
+      const perCat: Record<string, number> = {};
+      for (const e of userEntries) {
+        const id = catToId(e.category) || e.category;
+        perCat[id] = (perCat[id] || 0) + e.amount;
+      }
+
+      // Build mini donut segments
+      const miniSegs: { catId: string; color: string; startAngle: number; endAngle: number }[] = [];
+      if (total > 0) {
+        let angle = -Math.PI / 2;
+        categories.forEach((cat) => {
+          const amt = perCat[cat.id] || 0;
+          if (amt === 0) return;
+          const slice = (amt / total) * 2 * Math.PI;
+          if (slice <= 0.005) return;
+          miniSegs.push({ catId: cat.id, color: CAT_COLORS[cat.id] || '#999', startAngle: angle, endAngle: angle + slice });
+          angle += slice;
+        });
+      }
+
+      // Top 3 categories
+      const topCats = Object.entries(perCat)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([catId, amount]) => {
+          const cat = categories.find((c) => c.id === catId);
+          return { catId, name: cat?.name || catId, icon: cat?.icon || '📦', amount, pct: total > 0 ? amount / total : 0 };
+        });
+
+      return { name, color: USER_COLORS[idx], total, topCats, miniSegs };
+    });
+  }, [filteredEntries, userNames, categories]);
 
   const hasTargets = settings.monthlyTargets && Object.keys(settings.monthlyTargets).some((k) => settings.monthlyTargets[k] > 0);
 
@@ -305,7 +392,7 @@ export default function SummaryTab({ entries, settings, currentMonth }: SummaryT
         <div className="summary-total-card" style={{ borderLeft: `4px solid ${type === 'expense' ? '#E74C3C' : '#27AE60'}` }}>
           <div className="total-label">{type === 'expense' ? '今月の支出' : '今月の収入'}</div>
           <div className="total-amount" style={{ color: type === 'expense' ? '#E74C3C' : '#27AE60' }}>
-            ¥{totalAmount.toLocaleString()}
+            ¥{overallTotal.toLocaleString()}
           </div>
         </div>
       </div>
@@ -318,7 +405,12 @@ export default function SummaryTab({ entries, settings, currentMonth }: SummaryT
             {categories.map((cat) => {
               const target = settings.monthlyTargets?.[cat.id] || 0;
               if (target === 0) return null;
-              const spent = catTotals[cat.id] || 0;
+              const allCatTotals: Record<string, number> = {};
+              for (const entry of filteredEntries) {
+                const id = catToId(entry.category) || entry.category;
+                allCatTotals[id] = (allCatTotals[id] || 0) + entry.amount;
+              }
+              const spent = allCatTotals[cat.id] || 0;
               const remaining = target - spent;
               const percentage = (spent / target) * 100;
               let barColor = '#27AE60';
@@ -342,58 +434,117 @@ export default function SummaryTab({ entries, settings, currentMonth }: SummaryT
         </div>
       )}
 
-      {/* SVG Donut Chart */}
+      {/* User filter tabs + Donut Chart */}
       <div className="summary-section">
-        <div className="card" style={{ textAlign: 'center' }}>
+        <div className="card" style={{ textAlign: 'center', padding: '12px 10px' }}>
           <h3 className="section-title" style={{ textAlign: 'left' }}>
             {type === 'expense' ? '支出内訳' : '収入内訳'}
           </h3>
-          <div style={{ position: 'relative', width: 200, height: 200, margin: '12px auto' }}>
-            <svg width="200" height="200" viewBox="0 0 200 200">
-              {/* Background ring */}
-              <circle cx="100" cy="100" r="70" fill="none" stroke="#f0f0f0" strokeWidth="24" />
-              {totalAmount === 0 ? null : (
-                segments.map((seg) => (
-                  <DonutSegment
-                    key={seg.catId}
-                    cx={100} cy={100} radius={70} strokeWidth={24}
-                    startAngle={seg.startAngle} endAngle={seg.endAngle}
-                    color={seg.color}
-                    isHovered={hoveredCat === seg.catId}
-                    onHover={() => setHoveredCat(seg.catId)}
-                    onLeave={() => setHoveredCat(null)}
-                  />
-                ))
-              )}
-            </svg>
-            {/* Center text */}
-            <div style={{
-              position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-              textAlign: 'center', pointerEvents: 'none',
-            }}>
-              {hoveredSegment ? (
-                <>
-                  <div style={{ fontSize: 12, color: '#999', marginBottom: 2 }}>{hoveredSegment.icon} {hoveredSegment.catName}</div>
-                  <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1a1a' }}>¥{hoveredSegment.amount.toLocaleString()}</div>
-                  <div style={{ fontSize: 11, color: '#999' }}>{(hoveredSegment.pct * 100).toFixed(1)}%</div>
-                </>
-              ) : (
-                <>
-                  <div style={{ fontSize: 10, color: '#999', marginBottom: 2 }}>合計</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a1a' }}>
-                    {totalAmount > 0 ? `¥${totalAmount.toLocaleString()}` : 'データなし'}
-                  </div>
-                </>
+
+          {/* User filter */}
+          <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+            <button
+              onClick={() => setSelectedUser('全員')}
+              style={{
+                flex: 1, padding: '5px 2px', border: `2px solid ${selectedUser === '全員' ? '#1a1a1a' : '#e0e0e0'}`,
+                borderRadius: 8, background: selectedUser === '全員' ? '#1a1a1a' : '#fff',
+                color: selectedUser === '全員' ? '#fff' : '#999', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              全員
+            </button>
+            {userNames.map((name, i) => (
+              <button
+                key={name}
+                onClick={() => setSelectedUser(name)}
+                style={{
+                  flex: 1, padding: '5px 2px', border: `2px solid ${selectedUser === name ? USER_COLORS[i] : '#e0e0e0'}`,
+                  borderRadius: 8, background: selectedUser === name ? `${USER_COLORS[i]}15` : '#fff',
+                  color: selectedUser === name ? USER_COLORS[i] : '#999', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+
+          {/* Donut + Top categories side by side */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ position: 'relative', width: 160, height: 160, flexShrink: 0 }}>
+              <svg width="160" height="160" viewBox="0 0 160 160">
+                <circle cx="80" cy="80" r="56" fill="none" stroke="#f0f0f0" strokeWidth="22" />
+                {totalAmount === 0 ? null : (
+                  segments.map((seg) => (
+                    <DonutSegment
+                      key={seg.catId}
+                      cx={80} cy={80} radius={56} strokeWidth={22}
+                      startAngle={seg.startAngle} endAngle={seg.endAngle}
+                      color={seg.color}
+                      isHovered={hoveredCat === seg.catId}
+                      onHover={() => setHoveredCat(seg.catId)}
+                      onLeave={() => setHoveredCat(null)}
+                    />
+                  ))
+                )}
+              </svg>
+              {/* Center text */}
+              <div style={{
+                position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+                textAlign: 'center', pointerEvents: 'none',
+              }}>
+                {hoveredSegment ? (
+                  <>
+                    <div style={{ fontSize: 10, color: '#999', marginBottom: 1 }}>{hoveredSegment.icon} {hoveredSegment.catName}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>¥{hoveredSegment.amount.toLocaleString()}</div>
+                    <div style={{ fontSize: 10, color: '#999' }}>{(hoveredSegment.pct * 100).toFixed(1)}%</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 9, color: '#999', marginBottom: 1 }}>
+                      {selectedUser === '全員' ? '合計' : selectedUser}
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a1a' }}>
+                      {totalAmount > 0 ? `¥${totalAmount.toLocaleString()}` : 'なし'}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Top categories list beside chart */}
+            <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+              {segments.slice(0, 5).map((seg) => (
+                <div
+                  key={seg.catId}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 4, padding: '3px 0', fontSize: 11,
+                    cursor: 'pointer', opacity: hoveredCat === seg.catId ? 1 : 0.85,
+                    transition: 'opacity 0.2s',
+                  }}
+                  onMouseEnter={() => setHoveredCat(seg.catId)}
+                  onMouseLeave={() => setHoveredCat(null)}
+                >
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: seg.color, flexShrink: 0 }} />
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{seg.icon} {seg.catName}</span>
+                  <span style={{ marginLeft: 'auto', fontWeight: 600, flexShrink: 0, fontSize: 10, color: '#555' }}>
+                    ¥{seg.amount.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+              {segments.length > 5 && (
+                <div style={{ fontSize: 10, color: '#999', paddingTop: 2 }}>
+                  +{segments.length - 5}カテゴリ
+                </div>
               )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Category breakdown */}
+      {/* Full Category breakdown */}
       {totalAmount > 0 && (
         <div className="summary-section">
-          <div className="card">
+          <div className="card" style={{ padding: '10px 12px' }}>
             <h3 className="section-title">カテゴリ別内訳</h3>
             {segments.map((seg) => (
               <div
@@ -401,7 +552,7 @@ export default function SummaryTab({ entries, settings, currentMonth }: SummaryT
                 className="cat-row"
                 onMouseEnter={() => setHoveredCat(seg.catId)}
                 onMouseLeave={() => setHoveredCat(null)}
-                style={{ background: hoveredCat === seg.catId ? '#fafafa' : 'transparent', borderRadius: 6, padding: '7px 4px', cursor: 'pointer', transition: 'background 0.2s' }}
+                style={{ background: hoveredCat === seg.catId ? '#fafafa' : 'transparent', borderRadius: 6, padding: '6px 4px', cursor: 'pointer', transition: 'background 0.2s' }}
               >
                 <div className="cat-dot" style={{ backgroundColor: seg.color }} />
                 <div className="cat-info">
@@ -424,7 +575,7 @@ export default function SummaryTab({ entries, settings, currentMonth }: SummaryT
           <div className="card">
             <h3 className="section-title">日別支出</h3>
             <DailyChart
-              entries={entries}
+              entries={selectedUser === '全員' ? entries : entries.filter((e) => resolveUserName(e.user_name) === selectedUser)}
               currentMonth={currentMonth}
               categories={EXPENSE_CATS}
             />
@@ -432,23 +583,54 @@ export default function SummaryTab({ entries, settings, currentMonth }: SummaryT
         </div>
       )}
 
-      {/* User comparison */}
+      {/* User breakdown cards */}
       <div className="summary-section">
-        <div className="card">
-          <h3 className="section-title">ユーザー別合計</h3>
-          <div className="user-boxes">
-            <div className="user-box-card" style={{ background: '#3B82F6' }}>
-              <div className="user-box-name">{settings.user1Name || 'ユーザー1'}</div>
-              <div className="user-box-amount">¥{user1Total.toLocaleString()}</div>
-            </div>
-            <div className="user-box-card" style={{ background: '#EF4444' }}>
-              <div className="user-box-name">{settings.user2Name || 'ユーザー2'}</div>
-              <div className="user-box-amount">¥{user2Total.toLocaleString()}</div>
-            </div>
-            <div className="user-box-card" style={{ background: '#8B5CF6' }}>
-              <div className="user-box-name">{settings.user3Name || 'ユーザー3'}</div>
-              <div className="user-box-amount">¥{user3Total.toLocaleString()}</div>
-            </div>
+        <div className="card" style={{ padding: '10px 12px' }}>
+          <h3 className="section-title">ユーザー別内訳</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {userBreakdowns.map((ub) => (
+              <div
+                key={ub.name}
+                onClick={() => setSelectedUser(selectedUser === ub.name ? '全員' : ub.name)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: 10,
+                  background: selectedUser === ub.name ? `${ub.color}08` : '#fafafa',
+                  borderRadius: 10, border: `1.5px solid ${selectedUser === ub.name ? ub.color : '#eee'}`,
+                  cursor: 'pointer', transition: 'all 0.2s',
+                }}
+              >
+                {/* Mini donut */}
+                <MiniDonut segments={ub.miniSegs} size={52} radius={18} strokeWidth={8} />
+
+                {/* Info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, color: '#fff', background: ub.color,
+                      padding: '1px 7px', borderRadius: 10,
+                    }}>
+                      {ub.name}
+                    </span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>
+                      ¥{ub.total.toLocaleString()}
+                    </span>
+                    {overallTotal > 0 && (
+                      <span style={{ fontSize: 10, color: '#999' }}>
+                        ({(ub.total / overallTotal * 100).toFixed(0)}%)
+                      </span>
+                    )}
+                  </div>
+                  {/* Top categories inline */}
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {ub.topCats.map((tc) => (
+                      <span key={tc.catId} style={{ fontSize: 10, color: '#666', whiteSpace: 'nowrap' }}>
+                        {tc.icon} ¥{tc.amount.toLocaleString()}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>

@@ -231,14 +231,78 @@ export default function ReceiptUpload({
           </button>
         )}
 
-        {/* Progress Bar */}
+        {/* Loading Animation with Pixel Art Cat */}
         {isProcessing && (
           <div className="receipt-section">
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${progress}%`, backgroundColor: '#1a1a1a' }} />
+            <div className="loading-cat-container">
+              {/* Ragdoll cat pixel art running on the bar */}
+              <div className="loading-cat-track">
+                <div className="pixel-cat-runner">
+                  <svg width="32" height="24" viewBox="0 0 32 24" style={{ imageRendering: 'pixelated' }}>
+                    {/* Pixel art ragdoll cat - frame animation via CSS */}
+                    <g className="cat-frame cat-frame-1">
+                      {/* Ears */}
+                      <rect x="4" y="0" width="3" height="3" fill="#F5DEB3"/>
+                      <rect x="11" y="0" width="3" height="3" fill="#F5DEB3"/>
+                      <rect x="5" y="0" width="1" height="2" fill="#FFB6C1"/>
+                      <rect x="12" y="0" width="1" height="2" fill="#FFB6C1"/>
+                      {/* Head */}
+                      <rect x="3" y="3" width="12" height="8" fill="#F5DEB3"/>
+                      <rect x="5" y="5" width="2" height="2" fill="#4A90D9"/>
+                      <rect x="10" y="5" width="2" height="2" fill="#4A90D9"/>
+                      <rect x="8" y="7" width="2" height="1" fill="#FFB6C1"/>
+                      {/* Dark markings on face */}
+                      <rect x="3" y="3" width="2" height="2" fill="#C4A882"/>
+                      <rect x="13" y="3" width="1" height="2" fill="#C4A882"/>
+                      {/* Body */}
+                      <rect x="6" y="11" width="14" height="7" fill="#F5DEB3"/>
+                      <rect x="8" y="11" width="10" height="3" fill="#C4A882"/>
+                      {/* Front legs (running pose 1) */}
+                      <rect x="8" y="18" width="2" height="5" fill="#F5DEB3"/>
+                      <rect x="14" y="18" width="2" height="3" fill="#F5DEB3"/>
+                      {/* Back legs */}
+                      <rect x="17" y="18" width="2" height="4" fill="#F5DEB3"/>
+                      {/* Tail */}
+                      <rect x="20" y="11" width="6" height="2" fill="#C4A882"/>
+                      <rect x="25" y="9" width="3" height="2" fill="#C4A882"/>
+                      <rect x="27" y="7" width="2" height="2" fill="#F5DEB3"/>
+                    </g>
+                    <g className="cat-frame cat-frame-2">
+                      {/* Ears */}
+                      <rect x="4" y="1" width="3" height="3" fill="#F5DEB3"/>
+                      <rect x="11" y="1" width="3" height="3" fill="#F5DEB3"/>
+                      <rect x="5" y="1" width="1" height="2" fill="#FFB6C1"/>
+                      <rect x="12" y="1" width="1" height="2" fill="#FFB6C1"/>
+                      {/* Head */}
+                      <rect x="3" y="4" width="12" height="8" fill="#F5DEB3"/>
+                      <rect x="5" y="6" width="2" height="2" fill="#4A90D9"/>
+                      <rect x="10" y="6" width="2" height="2" fill="#4A90D9"/>
+                      <rect x="8" y="8" width="2" height="1" fill="#FFB6C1"/>
+                      <rect x="3" y="4" width="2" height="2" fill="#C4A882"/>
+                      <rect x="13" y="4" width="1" height="2" fill="#C4A882"/>
+                      {/* Body */}
+                      <rect x="6" y="12" width="14" height="6" fill="#F5DEB3"/>
+                      <rect x="8" y="12" width="10" height="3" fill="#C4A882"/>
+                      {/* Front legs (running pose 2) */}
+                      <rect x="8" y="18" width="2" height="3" fill="#F5DEB3"/>
+                      <rect x="13" y="18" width="2" height="5" fill="#F5DEB3"/>
+                      {/* Back legs */}
+                      <rect x="18" y="18" width="2" height="5" fill="#F5DEB3"/>
+                      {/* Tail */}
+                      <rect x="20" y="10" width="6" height="2" fill="#C4A882"/>
+                      <rect x="25" y="8" width="3" height="2" fill="#C4A882"/>
+                      <rect x="27" y="6" width="2" height="3" fill="#F5DEB3"/>
+                    </g>
+                  </svg>
+                </div>
+              </div>
+              {/* Progress bar */}
+              <div className="progress-bar" style={{ height: 8, borderRadius: 4 }}>
+                <div className="progress-fill loading-bar-smooth" />
+              </div>
             </div>
             <p style={{ textAlign: 'center', fontSize: 12, color: '#666', marginTop: 8 }}>
-              読み取り中... {progress}%
+              レシートを読み取っています...
             </p>
           </div>
         )}

@@ -179,6 +179,31 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Yu Gothic',sa
 .receipt-preview{max-width:100%;max-height:200px;border-radius:8px;margin:12px 0;object-fit:contain}
 .progress-bar{height:6px;background:#f0f0f0;border-radius:3px;overflow:hidden}
 .progress-fill{height:100%;border-radius:3px;transition:width .3s}
+
+/* === Loading Cat Animation === */
+.loading-cat-container{position:relative;padding:16px 0 4px}
+.loading-cat-track{position:relative;height:28px;margin-bottom:4px}
+.pixel-cat-runner{
+  position:absolute;bottom:0;left:0;
+  animation:catRun 15s linear forwards;
+}
+@keyframes catRun{
+  0%{left:0}
+  100%{left:calc(100% - 32px)}
+}
+/* Cat frame animation - alternate frames via opacity */
+.cat-frame-1{animation:catFrame1 0.3s step-end infinite}
+.cat-frame-2{animation:catFrame2 0.3s step-end infinite}
+@keyframes catFrame1{0%{opacity:1}50%{opacity:0}}
+@keyframes catFrame2{0%{opacity:0}50%{opacity:1}}
+/* Smooth loading bar */
+.loading-bar-smooth{
+  background:linear-gradient(90deg,#1a1a1a 0%,#555 100%);
+  border-radius:4px;
+  width:0;
+  animation:smoothLoad 15s linear forwards;
+}
+@keyframes smoothLoad{0%{width:0}100%{width:100%}}
 .receipt-items-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .receipt-items-header h3{font-size:15px;font-weight:600;margin:0}
 .receipt-item-row{display:flex;gap:6px;align-items:center;padding:8px 0;border-bottom:1px solid #f0f0f0}
