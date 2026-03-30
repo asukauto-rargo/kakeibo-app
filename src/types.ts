@@ -37,4 +37,11 @@ export interface ParsedReceiptItem {
   category: string;
 }
 
+/** レシートOCRの結果全体 */
+export interface ParsedReceiptResult {
+  date: string;            // レシートから読み取った日付 (YYYY-MM-DD)
+  storeName: string;       // 店舗名
+  items: ParsedReceiptItem[];
+}
+
 export type TabId = 'input' | 'list' | 'fixed' | 'summary' | 'settings';

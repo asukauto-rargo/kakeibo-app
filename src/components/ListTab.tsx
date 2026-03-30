@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
-import { ALL_CATS, findCat, catToName, catToId, CAT_COLORS } from '../constants';
+import { ALL_CATS, findCat, catToName, CAT_COLORS } from '../constants';
 import type { Entry, Settings } from '../types';
 
 interface ListTabProps {
@@ -80,43 +80,66 @@ export default function ListTab({
     return '#999';
   };
 
-  const getCategoryIcon = (category: string) => {
-    const cat = findCat(category);
-    return cat?.icon || '📦';
-  };
-
+  const getCategoryIcon = (category: string) => findCat(category)?.icon || '📦';
   const getCategoryColor = (category: string) => {
     const cat = findCat(category);
-    if (!cat) return '#999';
-    return CAT_COLORS[cat.id] || '#999';
+    return cat ? (CAT_COLORS[cat.id] || '#999') : '#999';
   };
 
   /** レシート登録のメモから詳細アイテムを抽出 */
-  const parseReceiptMemo = (memo: string): { isReceipt: boolean; items: { name: string; amount: string }[] } => {
-    if (!memo.startsWith('【レシート')) return { isReceipt: false, items: [] };
-    const content = memo.replace(/^【レシート \d+品】/, '');
-    const items = content.split('｜').map((part) => {
-      const match = part.match(/^(.+?)\s*¥([\d,]+)$/);
-      if (match) return { name: match[1], amount: `¥${match[2]}` };
-      return { name: part, amount: '' };
-    }).filter((it) => it.name);
-    return { isReceipt: true, items };
+  const parseReceiptMemo = (memo: string): {
+    isReceipt: boolean;
+    label: string;
+    items: { name: string; amount: string; category: string }[];
+  } => {
+    // 新形式: 【店舗名 N品】品名 ¥金額 [カテゴリ]｜...
+    const matchNew = memo.match(/^【(.+?)\s+(\d+)品】(.+)$/);
+    if (matchNew) {
+      const label = matchNew[1];
+      const content = matchNew[3];
+      const items = content.split('｜').map((part) => {
+        const m = part.match(/^(.+?)\s*¥([\d,]+)\s*\[(.+?)\]$/);
+        if (m) return { name: m[1], amount: `¥${m[2]}`, category: m[3] };
+        // 旧形式fallback（カテゴリなし）
+        const m2 = part.match(/^(.+?)\s*¥([\d,]+)$/);
+        if (m2) return { name: m2[1], amount: `¥${m2[2]}`, category: '' };
+        return { name: part, amount: '', category: '' };
+      }).filter((it) => it.name);
+      return { isReceipt: true, label, items };
+    }
+
+    // 旧形式: 【レシート N品】品名 ¥金額｜...
+    const matchOld = memo.match(/^【レシート\s+(\d+)品】(.+)$/);
+    if (matchOld) {
+      const content = matchOld[2];
+      const items = content.split('｜').map((part) => {
+        const m = part.match(/^(.+?)\s*¥([\d,]+)$/);
+        if (m) return { name: m[1], amount: `¥${m[2]}`, category: '' };
+        return { name: part, amount: '', category: '' };
+      }).filter((it) => it.name);
+      return { isReceipt: true, label: 'レシート', items };
+    }
+
+    return { isReceipt: false, label: '', items: [] };
   };
 
   return (
     <div className="list-tab card">
-      {/* Filter Section with Labels */}
+      {/* Filter Section */}
       <div className="filter-group">
-        <div className="filter-label">入力者</div>
         <div className="filter-row" style={{ marginBottom: 4 }}>
-          <select
-            value={selectedUser}
-            onChange={(e) => setSelectedUser(e.target.value)}
-          >
-            {userOptions.map((u) => (
-              <option key={u} value={u}>{u}</option>
-            ))}
-          </select>
+          <div>
+            <div className="filter-label" style={{ marginBottom: 3 }}>入力者</div>
+            <select
+              value={selectedUser}
+              onChange={(e) => setSelectedUser(e.target.value)}
+              style={{ width: '100%' }}
+            >
+              {userOptions.map((u) => (
+                <option key={u} value={u}>{u}</option>
+              ))}
+            </select>
+          </div>
           <div>
             <div className="filter-label" style={{ marginBottom: 3 }}>種類</div>
             <select
@@ -158,18 +181,16 @@ export default function ListTab({
                 全期間
               </button>
             ) : (
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => {
-                    setSelectedDate(e.target.value);
-                    if (!e.target.value) setShowDatePicker(false);
-                  }}
-                  style={{ width: '100%', color: '#1a1a1a', WebkitTextFillColor: '#1a1a1a' }}
-                  autoFocus={showDatePicker && !selectedDate}
-                />
-              </div>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => {
+                  setSelectedDate(e.target.value);
+                  if (!e.target.value) setShowDatePicker(false);
+                }}
+                style={{ width: '100%' }}
+                autoFocus={showDatePicker && !selectedDate}
+              />
             )}
           </div>
         </div>
@@ -194,7 +215,7 @@ export default function ListTab({
             const isExpanded = expandedEntryId === entry.id;
 
             return (
-              <div key={entry.id}>
+              <div key={entry.id} className="entry-card-wrap">
                 <div
                   className="entry-item"
                   onClick={receiptInfo.isReceipt ? () => setExpandedEntryId(isExpanded ? null : entry.id) : undefined}
@@ -207,12 +228,12 @@ export default function ListTab({
                       color: getCategoryColor(entry.category),
                     }}
                   >
-                    {getCategoryIcon(entry.category)}
+                    {receiptInfo.isReceipt ? '🧾' : getCategoryIcon(entry.category)}
                   </div>
 
                   <div className="entry-detail">
                     <div className="entry-cat">
-                      {catToName(entry.category)}
+                      {receiptInfo.isReceipt ? receiptInfo.label : catToName(entry.category)}
                       {receiptInfo.isReceipt && (
                         <span style={{ fontSize: 10, color: '#999', marginLeft: 4, fontWeight: 400 }}>
                           {receiptInfo.items.length}品 {isExpanded ? '▲' : '▼'}
@@ -226,10 +247,7 @@ export default function ListTab({
 
                   <div className="entry-right-section">
                     <div className="entry-meta">
-                      <span
-                        className="user-badge"
-                        style={{ backgroundColor: getUserBadgeColor(entry.user_name) }}
-                      >
+                      <span className="user-badge" style={{ backgroundColor: getUserBadgeColor(entry.user_name) }}>
                         {resolveUserName(entry.user_name)}
                       </span>
                       <span className="entry-date">{entry.date}</span>
@@ -254,7 +272,14 @@ export default function ListTab({
                   <div className="receipt-detail-expand">
                     {receiptInfo.items.map((it, idx) => (
                       <div key={idx} className="receipt-detail-row">
-                        <span className="receipt-detail-name">{it.name}</span>
+                        <span className="receipt-detail-name">
+                          {it.category && (
+                            <span style={{ fontSize: 10, color: '#aaa', marginRight: 4 }}>
+                              {findCat(it.category)?.icon || ''}
+                            </span>
+                          )}
+                          {it.name}
+                        </span>
                         <span className="receipt-detail-amount">{it.amount}</span>
                       </div>
                     ))}

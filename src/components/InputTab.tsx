@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { EXPENSE_CATS, INCOME_CATS } from '../constants';
-import type { Entry, Settings } from '../types';
+import type { Entry, Settings, ParsedReceiptItem } from '../types';
 import ReceiptUpload from './ReceiptUpload';
 
 interface InputTabProps {
@@ -84,44 +84,54 @@ export default function InputTab({
     }
   };
 
-  const handleItemsParsed = async (items: { name: string; amount: number; category: string }[]) => {
+  const handleReceiptRegistered = async (result: {
+    user: string;
+    date: string;
+    memo: string;
+    items: ParsedReceiptItem[];
+  }) => {
     setShowReceiptUpload(false);
     setIsLoading(true);
 
     try {
-      // カテゴリ別にグループ化して登録
-      const grouped: Record<string, { items: { name: string; amount: number }[]; total: number }> = {};
-      for (const item of items) {
-        if (!grouped[item.category]) {
-          grouped[item.category] = { items: [], total: 0 };
-        }
-        grouped[item.category].items.push({ name: item.name, amount: item.amount });
-        grouped[item.category].total += item.amount;
-      }
+      // レシート全体を1つのエントリとして登録
+      // 合計金額を計算
+      const totalAmount = result.items.reduce((sum, it) => sum + it.amount, 0);
 
-      const newEntries = Object.entries(grouped).map(([category, group]) => {
-        // 詳細をJSON形式でメモに格納（展開表示用）
-        const detailLines = group.items.map((it) => `${it.name} ¥${it.amount.toLocaleString()}`).join('｜');
-        return {
-          user_name: currentUser,
-          type: 'expense' as const,
-          category,
-          amount: group.total,
-          memo: `【レシート ${group.items.length}品】${detailLines}`,
-          date,
-        };
-      });
+      // 品目の詳細をメモに格納
+      const detailLines = result.items.map((it) =>
+        `${it.name} ¥${it.amount.toLocaleString()} [${it.category}]`
+      ).join('｜');
+
+      const receiptLabel = result.memo || 'レシート';
+      const memoStr = `【${receiptLabel} ${result.items.length}品】${detailLines}`;
+
+      // 最も金額が大きいカテゴリを代表カテゴリにする
+      const catTotals: Record<string, number> = {};
+      for (const item of result.items) {
+        catTotals[item.category] = (catTotals[item.category] || 0) + item.amount;
+      }
+      const mainCategory = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || '食費';
+
+      const newEntry = {
+        user_name: result.user,
+        type: 'expense' as const,
+        category: mainCategory,
+        amount: totalAmount,
+        memo: memoStr,
+        date: result.date,
+      };
 
       const { data, error } = await supabase
         .from('entries')
-        .insert(newEntries)
+        .insert([newEntry])
         .select();
 
       if (error) throw error;
 
       if (data) {
         data.forEach((entry) => onEntryAdded(entry as Entry));
-        showToast(`レシートから ${Object.keys(grouped).length} カテゴリ登録しました`);
+        showToast(`レシート（${result.items.length}品）を登録しました`);
       }
     } catch (error) {
       console.error('Error adding receipt items:', error);
@@ -135,9 +145,10 @@ export default function InputTab({
     <div className="input-tab">
       {showReceiptUpload && (
         <ReceiptUpload
+          settings={settings}
           currentUser={currentUser}
           currentDate={date}
-          onItemsParsed={handleItemsParsed}
+          onReceiptRegistered={handleReceiptRegistered}
           onClose={() => setShowReceiptUpload(false)}
         />
       )}

@@ -23,6 +23,7 @@ export const EXPENSE_CATS: CategoryDef[] = [
   { id: 'water', name: '水道代', icon: '💧' },
   { id: 'gym', name: 'ジム代', icon: '💪' },
   { id: 'beauty', name: '美容代', icon: '💅' },
+  { id: 'study', name: '勉強代', icon: '📚' },
   { id: 'other_exp', name: 'その他', icon: '📦' },
 ];
 
@@ -40,7 +41,7 @@ export const CAT_COLORS: Record<string, string> = {
   comm: '#00BCD4', daily: '#1ABC9C', entertainment: '#9B59B6', clothing: '#2ECC71',
   medical: '#FF9800', pet: '#E91E63', sub: '#34495E', insurance: '#795548',
   loan: '#F39C12', transport: '#607D8B', social: '#8BC34A', water: '#00BCD4',
-  gym: '#FF5722', beauty: '#FF69B4', other_exp: '#C0392B',
+  gym: '#FF5722', beauty: '#FF69B4', study: '#5C6BC0', other_exp: '#C0392B',
   salary: '#27AE60', bonus: '#2ECC71', sidejob: '#16A085', other_inc: '#1ABC9C',
 };
 
@@ -86,6 +87,7 @@ export function guessCategory(itemName: string): string {
     [/ペット|猫|犬|ちゅーる/, 'pet'],
     [/Netflix|Amazon|サブスク|月額/, 'sub'],
     [/美容|まつげ|パーマ|カット|ヘア|ネイル|エステ|脱毛|サロン/, 'beauty'],
+    [/参考書|テキスト|問題集|資格|セミナー|講座|スクール|受験|検定|塾/, 'study'],
   ];
   for (const [re, cat] of rules) {
     if (re.test(lower) || re.test(itemName)) return cat;

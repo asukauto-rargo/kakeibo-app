@@ -1,4 +1,4 @@
-import type { ParsedReceiptItem } from '../types';
+import type { ParsedReceiptItem, ParsedReceiptResult } from '../types';
 import { EXPENSE_CATS } from '../constants';
 
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
@@ -38,18 +38,12 @@ function halfToFullKana(str: string): string {
           'ハ':'バ','ヒ':'ビ','フ':'ブ','ヘ':'ベ','ホ':'ボ',
           'ウ':'ヴ',
         };
-        if (dakutenMap[converted]) {
-          converted = dakutenMap[converted];
-          i++;
-        }
+        if (dakutenMap[converted]) { converted = dakutenMap[converted]; i++; }
       } else if (next === 'ﾟ' || next === '\u309A') {
         const handakutenMap: Record<string, string> = {
           'ハ':'パ','ヒ':'ピ','フ':'プ','ヘ':'ペ','ホ':'ポ',
         };
-        if (handakutenMap[converted]) {
-          converted = handakutenMap[converted];
-          i++;
-        }
+        if (handakutenMap[converted]) { converted = handakutenMap[converted]; i++; }
       }
       result += converted;
     } else {
@@ -61,21 +55,16 @@ function halfToFullKana(str: string): string {
 
 /**
  * 画像ファイルをJPEG形式に変換する（HEIC/HEIF等の非対応形式対策）
- * Canvasを使ってブラウザ側でJPEGにレンダリングする
  */
 function convertToJpeg(file: File): Promise<{ base64: string; mediaType: 'image/jpeg' }> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
-      // 最大幅2000pxにリサイズ（API送信サイズ削減 + 精度向上）
       const maxW = 2000;
       let w = img.width;
       let h = img.height;
-      if (w > maxW) {
-        h = Math.round(h * (maxW / w));
-        w = maxW;
-      }
+      if (w > maxW) { h = Math.round(h * (maxW / w)); w = maxW; }
       const canvas = document.createElement('canvas');
       canvas.width = w;
       canvas.height = h;
@@ -95,12 +84,12 @@ function convertToJpeg(file: File): Promise<{ base64: string; mediaType: 'image/
 }
 
 /**
- * レシート画像をClaude APIで解析し、品目と金額をパースする
+ * レシート画像をClaude APIで解析し、日付・店舗名・品目と金額をパースする
  */
 export async function parseReceipt(
   imageFile: File,
   onProgress?: (p: number) => void
-): Promise<ParsedReceiptItem[]> {
+): Promise<ParsedReceiptResult> {
   const apiKey = import.meta.env.VITE_CLAUDE_API_KEY;
   if (!apiKey) {
     throw new Error('VITE_CLAUDE_API_KEY が設定されていません。.env ファイルを確認してください。');
@@ -108,29 +97,15 @@ export async function parseReceipt(
 
   onProgress?.(10);
 
-  // 画像を常にJPEGに変換（HEIC/HEIF等の非対応形式にも対応）
-  let base64: string;
-  let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
-
-  const supportedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-  if (supportedTypes.includes(imageFile.type)) {
-    // 対応形式でもCanvasでJPEGに変換（サイズ最適化）
-    const converted = await convertToJpeg(imageFile);
-    base64 = converted.base64;
-    mediaType = converted.mediaType;
-  } else {
-    // HEIC/HEIF等 → Canvas経由でJPEGに変換
-    const converted = await convertToJpeg(imageFile);
-    base64 = converted.base64;
-    mediaType = converted.mediaType;
-  }
+  const converted = await convertToJpeg(imageFile);
+  const base64 = converted.base64;
+  const mediaType = converted.mediaType;
 
   onProgress?.(20);
 
-  // カテゴリ一覧を生成
   const categoryList = EXPENSE_CATS.map((c) => `${c.name}（${c.icon}）`).join('、');
+  const today = new Date().toISOString().split('T')[0];
 
-  // Claude API に送信
   const response = await fetch(CLAUDE_API_URL, {
     method: 'POST',
     headers: {
@@ -148,76 +123,59 @@ export async function parseReceipt(
           content: [
             {
               type: 'image',
-              source: {
-                type: 'base64',
-                media_type: mediaType,
-                data: base64,
-              },
+              source: { type: 'base64', media_type: mediaType, data: base64 },
             },
             {
               type: 'text',
               text: `あなたは日本のスーパーマーケット・コンビニ・ドラッグストアのレシート読み取りの専門家です。
-このレシート画像を注意深く解析し、購入品目と金額を**正確に**抽出してください。
+このレシート画像を注意深く解析し、以下の情報を抽出してください。
 
-## 最重要ルール：品目名の正確な認識
+## 抽出する情報
 
-日本のレシートは品目名が**半角カタカナ**や**省略表記**で印字されます。
-あなたは以下のルールに従い、**人間が読める正確な商品名**に変換してください。
+### 1. 日付
+- レシートに印字されている購入日を YYYY-MM-DD 形式で返してください
+- 日付が読み取れない場合は "${today}" を返してください
 
-### 半角カタカナの読み取り
-- レシート上の半角カタカナ（例：ﾊﾞﾝﾉｳﾈｷﾞ）を正確に全角に変換してください（例：バンノウネギ→万能ネギ）
-- 濁点（ﾞ）や半濁点（ﾟ）の処理を正確に行ってください
-- 例：ﾎﾞﾝﾚｽ→ボンレス、ﾌﾟﾘﾝ→プリン
+### 2. 店舗名
+- レシートの上部に記載されている店舗名を返してください
+- 読み取れない場合は "" を返してください
 
-### 品目名の先頭の記号・コードの除去
-- レシートの品目名の先頭にある「F」「*」「@」「#」などの管理コードは除去してください
-- 例：「Fﾊﾞﾝﾉｳﾈｷﾞ」→「万能ネギ」、「Fﾖｰｸﾞﾙﾄ100」→「ヨーグルト100」
+### 3. 購入品目と金額
 
-### 商品名の推測・補完
-- 省略された商品名は、一般的な商品名に補完してください
-- 例：「ﾐﾔｹ ｺｶｴﾓｷﾑ400」→「コカエモキム 400g」
-- 例：「ﾔｸﾙﾄ100010ml」→「ヤクルト1000 10ml」
-- 例：「ﾍﾞﾆﾎﾞﾊﾟｲ ｲﾁｺﾞ」→「紅ほっぱい イチゴ」
-- 数量表記（例：「4ｺ」「5ﾎﾝ」「10ｺ」）は商品名に含めてください
+#### 品目名の正確な認識
+- 半角カタカナ（例：ﾊﾞﾝﾉｳﾈｷﾞ）を全角に変換し、人間が読める商品名にしてください（例：万能ネギ）
+- 先頭の管理コード（F、*、@、#等）は除去してください
+- 省略された商品名は一般的な名前に補完してください
 
-### 金額の読み取り
-- 各品目の右側にある金額を正確に読み取ってください
-- 「×2」「×3」など複数個表記がある場合は、合計金額（単価×個数）を金額にしてください
-- 値引き行（ー、マイナス金額）は**その対象品目の金額から差し引く**か、除外してください
+#### 金額
+- 各品目の右側の金額を正確に読み取ってください
+- 複数個（×2等）がある場合は合計金額にしてください
 
-## 除外すべき行
-以下の行は**必ず除外**してください：
-- 小計、合計、総合計
-- 消費税、内税、外税、税
-- お預かり、お釣り、釣銭
-- ポイント、クーポン、値引合計
-- レジ番号、日付、店舗名
-- 空行、区切り線
+#### 除外行
+小計、合計、消費税、お預かり、お釣り、ポイント、レジ番号、日付行は除外してください
 
-## カテゴリの分類ルール
+### カテゴリ分類ルール
+- **食費**: 食品全般（野菜、果物、肉、魚、飲料、菓子、調味料、冷凍食品、惣菜、パン、米、麺類、乳製品、卵、酒類）
+- **日用品**: ティッシュ、洗剤、シャンプー、ゴミ袋、ラップ等
+- **ペット**: ペットフード、猫砂等
+- **医療費**: 薬、マスク等
+- **美容代**: 化粧品、スキンケア等
+- **勉強代**: 参考書、テキスト、資格関連等
+- 迷った場合は「食費」を選んでください
 
-スーパーやコンビニのレシートの場合、ほとんどの品目は「食費」に該当します。
-以下のルールで分類してください：
-
-- **食費**: 食品全般（野菜、果物、肉、魚、飲料、菓子、調味料、冷凍食品、惣菜、パン、米、麺類、乳製品、卵、酒類を含むすべての食品・飲料）
-- **日用品**: ティッシュ、洗剤、シャンプー、歯ブラシ、ゴミ袋、ラップ、アルミホイルなど生活消耗品
-- **ペット**: ペットフード、猫砂、ちゅーるなどペット用品
-- **医療費**: 薬、絆創膏、マスク（医療用）
-- **美容代**: 化粧品、スキンケア用品
-
-**迷った場合は「食費」を選んでください。**スーパーのレシートでは大部分が食費です。
-
-## カテゴリ一覧
+### カテゴリ一覧
 ${categoryList}
 
-## 出力形式
-以下のJSON配列のみを出力してください。説明文やマークダウンは不要です。
+## 出力形式（JSONのみ、説明不要）
+{
+  "date": "YYYY-MM-DD",
+  "storeName": "店舗名",
+  "items": [
+    {"name": "商品名", "amount": 金額, "category": "カテゴリ名"}
+  ]
+}
 
-[
-  {"name": "商品名（日本語で読みやすく変換した名前）", "amount": 金額（正の整数）, "category": "カテゴリ名"}
-]
-
-レシートが不鮮明で全く読み取れない場合は空の配列 [] を返してください。`,
+読み取れない場合: {"date": "${today}", "storeName": "", "items": []}`,
             },
           ],
         },
@@ -235,29 +193,40 @@ ${categoryList}
   }
 
   const data = await response.json();
-  const text = data.content?.[0]?.text || '[]';
+  const text = data.content?.[0]?.text || '{}';
 
   onProgress?.(90);
 
-  // JSONを抽出（Claudeがマークダウンコードブロックで囲む場合も対応）
-  const jsonMatch = text.match(/\[[\s\S]*\]/);
+  // JSON抽出
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    return [];
+    return { date: today, storeName: '', items: [] };
   }
 
   try {
-    const items: ParsedReceiptItem[] = JSON.parse(jsonMatch[0]);
+    const parsed = JSON.parse(jsonMatch[0]);
     onProgress?.(100);
 
-    // 後処理: 半角カナが残っていたら全角に変換 + name/amountのバリデーション
-    return items
-      .filter((item) => item.name && typeof item.amount === 'number' && item.amount > 0)
-      .map((item) => ({
+    const items: ParsedReceiptItem[] = (parsed.items || [])
+      .filter((item: ParsedReceiptItem) => item.name && typeof item.amount === 'number' && item.amount > 0)
+      .map((item: ParsedReceiptItem) => ({
         ...item,
         name: halfToFullKana(item.name).trim(),
       }));
+
+    // 日付のバリデーション
+    let receiptDate = parsed.date || today;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(receiptDate)) {
+      receiptDate = today;
+    }
+
+    return {
+      date: receiptDate,
+      storeName: parsed.storeName || '',
+      items,
+    };
   } catch {
     console.error('Failed to parse Claude response:', text);
-    return [];
+    return { date: today, storeName: '', items: [] };
   }
 }
