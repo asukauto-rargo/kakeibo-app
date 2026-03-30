@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { EXPENSE_CATS } from '../constants';
-import type { Settings } from '../types';
+import type { Entry, Settings } from '../types';
 
 interface SettingsTabProps {
   settings: Settings;
-  entries: never[];
+  entries: Entry[];
   currentMonth: string;
   onSettingsChanged: (s: Settings) => void;
 }
