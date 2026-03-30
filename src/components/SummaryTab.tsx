@@ -8,7 +8,7 @@ interface SummaryTabProps {
   currentMonth: string;
 }
 
-/** SVG donut chart segment */
+/** SVG donut chart segment with clear gap */
 function DonutSegment({
   cx, cy, radius, strokeWidth, startAngle, endAngle, color, isHovered, onHover, onLeave
 }: {
@@ -17,13 +17,14 @@ function DonutSegment({
   isHovered: boolean; onHover: () => void; onLeave: () => void;
 }) {
   const angle = endAngle - startAngle;
+  if (angle <= 0) return null;
   const largeArc = angle > Math.PI ? 1 : 0;
   const r = radius;
   const x1 = cx + r * Math.cos(startAngle);
   const y1 = cy + r * Math.sin(startAngle);
   const x2 = cx + r * Math.cos(endAngle);
   const y2 = cy + r * Math.sin(endAngle);
-  const sw = isHovered ? strokeWidth + 6 : strokeWidth;
+  const sw = isHovered ? strokeWidth + 8 : strokeWidth;
 
   return (
     <path
@@ -31,11 +32,189 @@ function DonutSegment({
       fill="none"
       stroke={color}
       strokeWidth={sw}
-      strokeLinecap="round"
-      style={{ transition: 'stroke-width 0.3s ease, opacity 0.3s ease', opacity: isHovered ? 1 : 0.85, cursor: 'pointer' }}
+      strokeLinecap="butt"
+      style={{
+        transition: 'stroke-width 0.3s ease, opacity 0.3s ease, filter 0.3s ease',
+        opacity: isHovered ? 1 : 0.88,
+        cursor: 'pointer',
+        filter: isHovered ? 'brightness(1.1) drop-shadow(0 0 4px rgba(0,0,0,0.2))' : 'none',
+      }}
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
+      onTouchStart={onHover}
     />
+  );
+}
+
+/** Daily stacked bar chart */
+function DailyChart({
+  entries,
+  currentMonth,
+  categories,
+}: {
+  entries: Entry[];
+  currentMonth: string;
+  categories: { id: string; name: string; icon: string }[];
+}) {
+  const [hoveredDay, setHoveredDay] = useState<number | null>(null);
+
+  const { dailyData, maxDayTotal, daysInMonth, activeCats } = useMemo(() => {
+    const [y, m] = currentMonth.split('-').map(Number);
+    const dim = new Date(y, m, 0).getDate();
+
+    // Build daily totals per category
+    const data: Record<number, Record<string, number>> = {};
+    for (let d = 1; d <= dim; d++) data[d] = {};
+
+    const catSet = new Set<string>();
+    for (const entry of entries) {
+      if (!entry.date?.startsWith(currentMonth) || entry.type !== 'expense') continue;
+      const day = parseInt(entry.date.split('-')[2], 10);
+      const catId = catToId(entry.category) || entry.category;
+      data[day][catId] = (data[day][catId] || 0) + entry.amount;
+      catSet.add(catId);
+    }
+
+    let maxTotal = 0;
+    for (let d = 1; d <= dim; d++) {
+      const dayTotal = Object.values(data[d]).reduce((s, v) => s + v, 0);
+      if (dayTotal > maxTotal) maxTotal = dayTotal;
+    }
+
+    const active = categories.filter((c) => catSet.has(c.id));
+
+    return { dailyData: data, maxDayTotal: maxTotal, daysInMonth: dim, activeCats: active };
+  }, [entries, currentMonth, categories]);
+
+  if (maxDayTotal === 0) {
+    return <div className="empty-state" style={{ padding: '16px 0' }}>支出データがありません</div>;
+  }
+
+  const chartWidth = 320;
+  const chartHeight = 180;
+  const barAreaWidth = chartWidth - 30;
+  const barWidth = Math.max(2, Math.min(10, (barAreaWidth / daysInMonth) - 1));
+  const barGap = Math.max(0.5, (barAreaWidth - barWidth * daysInMonth) / daysInMonth);
+
+  // Round up max to nearest nice number
+  const niceMax = Math.ceil(maxDayTotal / 1000) * 1000 || 1000;
+
+  return (
+    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <svg
+        width={Math.max(chartWidth, daysInMonth * (barWidth + barGap) + 40)}
+        height={chartHeight + 40}
+        viewBox={`0 0 ${Math.max(chartWidth, daysInMonth * (barWidth + barGap) + 40)} ${chartHeight + 40}`}
+        style={{ display: 'block' }}
+      >
+        {/* Grid lines */}
+        {[0, 0.25, 0.5, 0.75, 1].map((pct) => {
+          const lineY = 10 + (1 - pct) * chartHeight;
+          return (
+            <g key={pct}>
+              <line x1="30" y1={lineY} x2={chartWidth} y2={lineY} stroke="#f0f0f0" strokeWidth="1" />
+              <text x="26" y={lineY + 3} textAnchor="end" fontSize="8" fill="#999">
+                {pct === 0 ? '0' : `${((niceMax * pct) / 1000).toFixed(0)}k`}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Bars */}
+        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+          const x = 30 + (day - 1) * (barWidth + barGap) + barGap / 2;
+          const dayTotals = dailyData[day] || {};
+          const dayTotal = Object.values(dayTotals).reduce((s, v) => s + v, 0);
+          let yOffset = 0;
+
+          return (
+            <g
+              key={day}
+              onMouseEnter={() => setHoveredDay(day)}
+              onMouseLeave={() => setHoveredDay(null)}
+              onTouchStart={() => setHoveredDay(day)}
+            >
+              {/* Invisible hitbox */}
+              <rect x={x} y={10} width={barWidth} height={chartHeight} fill="transparent" />
+
+              {categories.map((cat) => {
+                const amount = dayTotals[cat.id] || 0;
+                if (amount === 0) return null;
+                const barH = (amount / niceMax) * chartHeight;
+                const barY = 10 + chartHeight - yOffset - barH;
+                yOffset += barH;
+                return (
+                  <rect
+                    key={cat.id}
+                    x={x}
+                    y={barY}
+                    width={barWidth}
+                    height={Math.max(barH, 0.5)}
+                    fill={CAT_COLORS[cat.id] || '#999'}
+                    rx="1"
+                    opacity={hoveredDay === day ? 1 : 0.85}
+                    style={{ transition: 'opacity 0.2s' }}
+                  />
+                );
+              })}
+
+              {/* Day label */}
+              {(day === 1 || day % 5 === 0 || day === daysInMonth) && (
+                <text
+                  x={x + barWidth / 2}
+                  y={chartHeight + 22}
+                  textAnchor="middle"
+                  fontSize="7"
+                  fill="#999"
+                >
+                  {day}
+                </text>
+              )}
+
+              {/* Hover tooltip */}
+              {hoveredDay === day && dayTotal > 0 && (
+                <g>
+                  <rect
+                    x={Math.min(x - 20, chartWidth - 70)}
+                    y={0}
+                    width="60"
+                    height="16"
+                    rx="4"
+                    fill="#1a1a1a"
+                    opacity="0.9"
+                  />
+                  <text
+                    x={Math.min(x - 20, chartWidth - 70) + 30}
+                    y={11}
+                    textAnchor="middle"
+                    fontSize="8"
+                    fill="#fff"
+                    fontWeight="600"
+                  >
+                    {day}日 ¥{dayTotal.toLocaleString()}
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+
+        {/* X axis */}
+        <line x1="30" y1={10 + chartHeight} x2={chartWidth} y2={10 + chartHeight} stroke="#e0e0e0" strokeWidth="1" />
+      </svg>
+
+      {/* Legend */}
+      {activeCats.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 10px', marginTop: 8, justifyContent: 'center' }}>
+          {activeCats.map((cat) => (
+            <div key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9, color: '#666' }}>
+              <div style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: CAT_COLORS[cat.id] || '#999' }} />
+              {cat.icon} {cat.name}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -65,19 +244,26 @@ export default function SummaryTab({ entries, settings, currentMonth }: SummaryT
   const totalAmount = filteredEntries.reduce((sum, entry) => sum + entry.amount, 0);
   const categories = type === 'expense' ? EXPENSE_CATS : INCOME_CATS;
 
-  // Build chart segments
+  // Build chart segments with clear gaps
   const segments = useMemo(() => {
     if (totalAmount === 0) return [];
     const result: { catId: string; catName: string; icon: string; color: string; amount: number; pct: number; startAngle: number; endAngle: number }[] = [];
     let currentAngle = -Math.PI / 2;
-    const GAP = 0.03; // small gap between segments
+    const GAP = 0.06; // visible gap between segments
 
-    categories.forEach((cat) => {
+    const activeSegs = categories.filter((cat) => (catTotals[cat.id] || 0) > 0);
+    const gapCount = activeSegs.length > 1 ? activeSegs.length : 0;
+    const totalGap = GAP * gapCount;
+    const availableAngle = 2 * Math.PI - totalGap;
+
+    activeSegs.forEach((cat) => {
       const amount = catTotals[cat.id] || 0;
       if (amount === 0) return;
       const pct = amount / totalAmount;
-      const sliceAngle = pct * 2 * Math.PI - GAP;
-      if (sliceAngle <= 0) return;
+      const sliceAngle = pct * availableAngle;
+      if (sliceAngle <= 0.01) return;
+
+      const halfGap = gapCount > 0 ? GAP / 2 : 0;
       result.push({
         catId: cat.id,
         catName: cat.name,
@@ -85,10 +271,10 @@ export default function SummaryTab({ entries, settings, currentMonth }: SummaryT
         color: CAT_COLORS[cat.id] || '#999',
         amount,
         pct,
-        startAngle: currentAngle + GAP / 2,
-        endAngle: currentAngle + GAP / 2 + sliceAngle,
+        startAngle: currentAngle + halfGap,
+        endAngle: currentAngle + halfGap + sliceAngle,
       });
-      currentAngle += pct * 2 * Math.PI;
+      currentAngle += sliceAngle + (gapCount > 0 ? GAP : 0);
     });
     return result;
   }, [catTotals, totalAmount, categories]);
@@ -171,9 +357,9 @@ export default function SummaryTab({ entries, settings, currentMonth }: SummaryT
           </h3>
           <div style={{ position: 'relative', width: 200, height: 200, margin: '12px auto' }}>
             <svg width="200" height="200" viewBox="0 0 200 200">
-              {totalAmount === 0 ? (
-                <circle cx="100" cy="100" r="70" fill="none" stroke="#eee" strokeWidth="24" />
-              ) : (
+              {/* Background ring */}
+              <circle cx="100" cy="100" r="70" fill="none" stroke="#f0f0f0" strokeWidth="24" />
+              {totalAmount === 0 ? null : (
                 segments.map((seg) => (
                   <DonutSegment
                     key={seg.catId}
@@ -235,6 +421,20 @@ export default function SummaryTab({ entries, settings, currentMonth }: SummaryT
                 <div className="cat-amount">¥{seg.amount.toLocaleString()}</div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Daily spending chart */}
+      {type === 'expense' && (
+        <div className="summary-section">
+          <div className="card">
+            <h3 className="section-title">日別支出</h3>
+            <DailyChart
+              entries={entries}
+              currentMonth={currentMonth}
+              categories={EXPENSE_CATS}
+            />
           </div>
         </div>
       )}

@@ -89,14 +89,28 @@ export default function InputTab({
     setIsLoading(true);
 
     try {
-      const newEntries = items.map((item) => ({
-        user_name: currentUser,
-        type: 'expense' as const,
-        category: item.category,
-        amount: item.amount,
-        memo: item.name,
-        date,
-      }));
+      // カテゴリ別にグループ化して登録
+      const grouped: Record<string, { items: { name: string; amount: number }[]; total: number }> = {};
+      for (const item of items) {
+        if (!grouped[item.category]) {
+          grouped[item.category] = { items: [], total: 0 };
+        }
+        grouped[item.category].items.push({ name: item.name, amount: item.amount });
+        grouped[item.category].total += item.amount;
+      }
+
+      const newEntries = Object.entries(grouped).map(([category, group]) => {
+        // 詳細をJSON形式でメモに格納（展開表示用）
+        const detailLines = group.items.map((it) => `${it.name} ¥${it.amount.toLocaleString()}`).join('｜');
+        return {
+          user_name: currentUser,
+          type: 'expense' as const,
+          category,
+          amount: group.total,
+          memo: `【レシート ${group.items.length}品】${detailLines}`,
+          date,
+        };
+      });
 
       const { data, error } = await supabase
         .from('entries')
@@ -107,7 +121,7 @@ export default function InputTab({
 
       if (data) {
         data.forEach((entry) => onEntryAdded(entry as Entry));
-        showToast(`レシートから ${data.length} 件登録しました`);
+        showToast(`レシートから ${Object.keys(grouped).length} カテゴリ登録しました`);
       }
     } catch (error) {
       console.error('Error adding receipt items:', error);

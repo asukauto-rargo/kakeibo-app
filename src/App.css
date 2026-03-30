@@ -193,3 +193,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Yu Gothic',sa
 .receipt-cat-title .cat-total{font-size:14px;font-weight:700;color:var(--red)}
 .receipt-cat-item{display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:var(--text-secondary)}
 .receipt-cat-item span:last-child{font-weight:600;color:var(--text)}
+
+/* ===== Receipt Detail Expand (List Tab) ===== */
+.receipt-detail-expand{background:#fafafa;border:1px solid #f0f0f0;border-top:none;border-radius:0 0 8px 8px;padding:8px 12px;margin-bottom:4px}
+.receipt-detail-row{display:flex;justify-content:space-between;padding:4px 0;font-size:11px;border-bottom:1px solid #f0f0f0}
+.receipt-detail-row:last-child{border:none}
+.receipt-detail-name{color:var(--text-secondary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.receipt-detail-amount{color:var(--text);font-weight:600;flex-shrink:0;margin-left:8px}
+
+/* ===== Date Filter Button ===== */
+.date-filter-btn{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:#fff;color:var(--text);cursor:pointer;text-align:left;font-family:inherit;transition:all .2s}
+.date-filter-btn:hover{background:var(--bg);border-color:#555}
+
+/* ===== Date input color fix ===== */
+input[type="date"]{color:var(--text)!important;-webkit-text-fill-color:var(--text)!important}
+input[type="date"]::-webkit-datetime-edit{color:var(--text)}
+input[type="date"]::-webkit-calendar-picker-indicator{opacity:0.6}
