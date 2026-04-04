@@ -13,6 +13,14 @@
 
 const STORAGE_KEY = 'kakeibo_webauthn_credential';
 
+/** RP IDを取得 (GitHub Pagesなどのサブドメイン対応) */
+function getRpId(): string {
+  const hostname = window.location.hostname;
+  // localhost の場合はそのまま
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return hostname;
+  return hostname;
+}
+
 interface StoredCredential {
   credentialId: string;
   refreshToken: string;
@@ -21,10 +29,21 @@ interface StoredCredential {
 
 /** WebAuthnがこのデバイス/ブラウザで利用可能か */
 export async function isWebAuthnAvailable(): Promise<boolean> {
-  if (!window.PublicKeyCredential) return false;
   try {
-    const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-    return available;
+    // PublicKeyCredential API自体が存在するか
+    if (typeof window === 'undefined') return false;
+    if (!window.PublicKeyCredential) return false;
+    if (!navigator.credentials) return false;
+
+    // プラットフォーム認証器（Face ID/Touch ID/Windows Hello）が使えるか
+    if (typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function') {
+      const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+      return available;
+    }
+
+    // isUserVerifyingPlatformAuthenticatorAvailable が無い古いブラウザでも
+    // PublicKeyCredential が存在すればトライ可能
+    return true;
   } catch {
     return false;
   }
@@ -66,7 +85,7 @@ export async function registerPasskey(
       challenge,
       rp: {
         name: '家計簿アプリ',
-        id: window.location.hostname,
+        id: getRpId(),
       },
       user: {
         id: userId,
@@ -127,7 +146,7 @@ export async function authenticateWithPasskey(): Promise<{
 
     const getOptions: PublicKeyCredentialRequestOptions = {
       challenge,
-      rpId: window.location.hostname,
+      rpId: getRpId(),
       allowCredentials: [
         {
           id: credentialIdBytes,

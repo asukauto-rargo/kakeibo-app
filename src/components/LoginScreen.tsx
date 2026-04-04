@@ -63,7 +63,10 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
       }
 
       // ログイン成功 → 生体認証が使えて未登録なら登録を提案
-      if (biometricAvailable && !hasStoredCredential() && data.session?.refresh_token) {
+      // biometricAvailable state が古い可能性があるため、ここで再チェック
+      const canUseBiometric = biometricAvailable || await isWebAuthnAvailable();
+      if (canUseBiometric && !hasStoredCredential() && data.session?.refresh_token) {
+        setBiometricAvailable(true);
         setShowRegisterPrompt(true);
         setLoading(false);
         return;
