@@ -24,6 +24,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Yu Gothic',sa
 .login-btn:disabled{opacity:0.5}
 .login-error{color:var(--red);font-size:12px;margin-top:8px;min-height:18px}
 
+/* ===== Biometric Login ===== */
+.biometric-login-btn{
+  width:100%;padding:14px 16px;border:2px solid var(--border);border-radius:12px;
+  background:#fafbfc;cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;gap:6px;transition:all .2s;
+}
+.biometric-login-btn:hover{border-color:#999;background:#f5f5f5}
+.biometric-login-btn:active{transform:scale(0.98)}
+.biometric-login-btn:disabled{opacity:0.5;cursor:not-allowed}
+.biometric-icon{color:var(--dark);display:flex;align-items:center;justify-content:center}
+.biometric-label{font-size:14px;font-weight:600;color:var(--dark)}
+.biometric-email{font-size:11px;color:var(--gray)}
+.biometric-divider{
+  display:flex;align-items:center;gap:12px;margin:16px 0 4px;
+  color:#bbb;font-size:12px;
+}
+.biometric-divider::before,.biometric-divider::after{
+  content:'';flex:1;height:1px;background:#e0e0e0;
+}
+.biometric-register-btn{background:var(--dark)!important;color:#fff!important}
+.biometric-skip-btn{background:#f0f0f0!important;color:#666!important;margin-top:0!important}
+
 /* ===== Header ===== */
 .app-header{background:var(--dark);color:#fff;padding:12px 16px;position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between}
 .app-header h1{font-size:18px;font-weight:600}

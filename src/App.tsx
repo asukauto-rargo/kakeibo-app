@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from './lib/supabase';
+import { updateStoredRefreshToken, hasStoredCredential } from './lib/webauthn';
 import type { Entry, FixedExpense, Settings, TabId } from './types';
 import LoginScreen from './components/LoginScreen';
 import AppHeader from './components/AppHeader';
@@ -40,6 +41,14 @@ export default function App() {
         setLoading(false);
       }
     });
+
+    // セッションリフレッシュ時にWebAuthnのトークンも更新
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.refresh_token && hasStoredCredential()) {
+        updateStoredRefreshToken(session.refresh_token);
+      }
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   // ── Load data after login ──
