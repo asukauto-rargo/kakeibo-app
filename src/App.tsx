@@ -19,8 +19,11 @@ const DEFAULT_SETTINGS: Settings = {
   monthlyTargets: {},
 };
 
+// ログイン機能を一時無効化 (true にすると認証が必要になる)
+const REQUIRE_LOGIN = false;
+
 export default function App() {
-  const [loggedIn, setLoggedIn] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(!REQUIRE_LOGIN);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('input');
   const [currentMonth, setCurrentMonth] = useState(() => {
@@ -34,6 +37,12 @@ export default function App() {
 
   // ── Auth check ──
   useEffect(() => {
+    if (!REQUIRE_LOGIN) {
+      // ログイン不要モード: 即座にデータ読込
+      loadAllData();
+      return;
+    }
+
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) {
         setLoggedIn(true);
@@ -49,10 +58,12 @@ export default function App() {
       }
     });
     return () => subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Load data after login ──
+  // ── Load data after login (認証モード時のみ) ──
   useEffect(() => {
+    if (!REQUIRE_LOGIN) return; // 上のuseEffectで既にloadAllData呼び済み
     if (!loggedIn) return;
     loadAllData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -199,7 +210,7 @@ export default function App() {
       <AppHeader
         currentMonth={currentMonth}
         onChangeMonth={changeMonth}
-        onLogout={handleLogout}
+        onLogout={REQUIRE_LOGIN ? handleLogout : undefined}
       />
 
       <button className="refresh-btn" onClick={loadAllData} title="データを更新">

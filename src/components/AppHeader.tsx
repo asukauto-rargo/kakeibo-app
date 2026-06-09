@@ -3,7 +3,7 @@ import React from 'react';
 interface AppHeaderProps {
   currentMonth: string; // YYYY-MM format
   onChangeMonth: (delta: number) => void;
-  onLogout: () => void;
+  onLogout?: () => void;
 }
 
 export default function AppHeader({
@@ -40,9 +40,11 @@ export default function AppHeader({
       </div>
 
       <div className="header-right">
-        <button className="logout-button" onClick={onLogout}>
-          ログアウト
-        </button>
+        {onLogout && (
+          <button className="logout-button" onClick={onLogout}>
+            ログアウト
+          </button>
+        )}
       </div>
     </header>
   );
