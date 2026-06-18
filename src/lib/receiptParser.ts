@@ -115,7 +115,7 @@ export async function parseReceipt(
       'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4096,
       messages: [
         {
@@ -127,52 +127,54 @@ export async function parseReceipt(
             },
             {
               type: 'text',
-              text: `あなたは日本のスーパーマーケット・コンビニ・ドラッグストアのレシート読み取りの専門家です。
-このレシート画像を注意深く解析し、以下の情報を抽出してください。
+              text: `あなたは日本のレシート読み取りの専門家です。このレシート画像を正確に解析してください。
 
-## 抽出する情報
+## ステップ1: レシート全体の構造を把握する
+まず、レシート全体を見て以下を特定してください：
+- 店舗名（上部に記載）
+- 購入日（日付が印字されている行）
+- **買上金額 / 合計 / お支払い金額**（レシート下部の最終的な支払金額）
+- 消費税に関する情報（内税/外税、8%/10%の区分）
 
-### 1. 日付
-- レシートに印字されている購入日を YYYY-MM-DD 形式で返してください
-- 日付が読み取れない場合は "${today}" を返してください
+## ステップ2: 各品目を読み取る
 
-### 2. 店舗名
-- レシートの上部に記載されている店舗名を返してください
-- 読み取れない場合は "" を返してください
+#### 品目名の処理
+- 半角カタカナ→全角カタカナに変換し、人間が読める商品名にする（例：ﾊﾞﾝﾉｳﾈｷﾞ→万能ネギ）
+- 先頭の管理コード（F、*、@、#等）は除去
+- 省略名は一般的な名前に補完
 
-### 3. 購入品目と金額
-
-#### 品目名の正確な認識
-- 半角カタカナ（例：ﾊﾞﾝﾉｳﾈｷﾞ）を全角に変換し、人間が読める商品名にしてください（例：万能ネギ）
-- 先頭の管理コード（F、*、@、#等）は除去してください
-- 省略された商品名は一般的な名前に補完してください
-
-#### 金額（税込み金額を出力）
-- 各品目の**税込み金額**を出力してください
-- レシートに税抜き価格しか記載がない場合は、消費税率（8%または10%）を適用して税込み金額を計算してください
-  - 軽減税率対象品目（食品・飲料）は8%、それ以外は10%
-  - レシートに「*」「※」等の軽減税率マークがある場合はそれに従ってください
-- 複数個（×2等）がある場合は合計金額にしてください
+#### 金額の読み取り（最重要）
+- レシートに記載されている**各品目の単価**を正確に読み取ってください
+- 複数個（×2等）がある場合は「単価×個数」の合計にしてください
+- **税抜き表示の場合**: レシートに「(税抜)」「本体価格」等と書かれている場合、消費税を加算して税込み金額にしてください
+  - 食品・飲料（軽減税率対象）: ×1.08
+  - それ以外: ×1.10
+  - レシートに「*」「※」等の軽減税率マークがあればそれに従う
+- **税込み表示の場合**: そのままの金額を使ってください
+- **内消費税/内税が記載されている場合**: 品目の金額はすでに税込みなので、そのまま使ってください
 
 #### 割引・値引きの処理
-- 割引行（「値引」「割引」「-」で始まるマイナス金額の行）を検出してください
-- 割引はその**直前の品目**に適用し、品目の金額から差し引いた金額を出力してください
-  - 例: りんご ¥200 → 値引 -¥30 の場合、りんごの金額は ¥170
-- 全体割引（クーポン割引等）は、最も金額の大きい品目から差し引いてください
-- 割引を適用した結果、金額が0以下になった品目は除外してください
+- 割引行（「値引」「割引」「-」で始まるマイナス金額）→ 直前の品目の金額から差し引く
+- 全体割引（クーポン等）→ 最高額の品目から差し引く
+- 差し引き後0以下の品目は除外
 
-#### 除外行
-小計、合計（税込合計含む）、消費税合計、内税、外税、お預かり、お釣り、ポイント、レジ番号、日付行は除外してください。
-※ 各品目の税込み単価は出力に含めますが、レシート末尾の「合計」行そのものは除外してください。
+#### 除外する行
+小計、合計、税合計、内税、外税、お預かり、お釣り、ポイント、レジ番号、バーコード、日付行は品目に含めない。
 
-### カテゴリ分類ルール
-- **食費**: 食品全般（野菜、果物、肉、魚、飲料、菓子、調味料、冷凍食品、惣菜、パン、米、麺類、乳製品、卵、酒類）
+## ステップ3: 検算（必須）
+**全品目の amount を合計し、レシートに記載されている「買上金額」「合計」「お支払い金額」と比較してください。**
+- 一致する場合: そのまま出力
+- 一致しない場合: 差額の原因を特定し修正（税計算ミス、品目の読み漏れ、割引の適用漏れ等）
+- 検算結果を "verification" フィールドに記載してください
+
+## カテゴリ分類
+- **食費**: 食品全般（野菜、果物、肉、魚、飲料、菓子、調味料、冷凍食品、惣菜、パン、米、麺、乳製品、卵、酒類）
 - **日用品**: ティッシュ、洗剤、シャンプー、ゴミ袋、ラップ等
 - **ペット**: ペットフード、猫砂等
 - **医療費**: 薬、マスク等
 - **美容代**: 化粧品、スキンケア等
 - **勉強代**: 参考書、テキスト、資格関連等
-- 迷った場合は「食費」を選んでください
+- 迷ったら「食費」
 
 ### カテゴリ一覧
 ${categoryList}
@@ -181,13 +183,24 @@ ${categoryList}
 {
   "date": "YYYY-MM-DD",
   "storeName": "店舗名",
+  "receiptTotal": レシート記載の合計金額(税込),
   "items": [
-    {"name": "商品名", "amount": 税込金額, "category": "カテゴリ名"}
-  ]
+    {"name": "商品名", "amount": 税込金額(整数), "category": "カテゴリ名"}
+  ],
+  "verification": {
+    "itemsSum": 品目合計,
+    "receiptTotal": レシート記載合計,
+    "match": true/false,
+    "note": "差異がある場合の説明"
+  }
 }
 
-重要: amountは必ず割引適用済み・税込みの最終金額にしてください。
-読み取れない場合: {"date": "${today}", "storeName": "", "items": []}`,
+### 重要ルール
+1. amountは必ず**整数**（小数点以下は四捨五入）
+2. amountは必ず**割引適用済み・税込みの最終金額**
+3. 全品目のamount合計がレシートの合計金額と一致するように調整すること
+4. レシートに「内消費税」として税額が記載されている場合、各品目価格にはすでに税が含まれているので二重加算しないこと
+5. 読み取れない場合: {"date": "${today}", "storeName": "", "receiptTotal": 0, "items": [], "verification": {"itemsSum": 0, "receiptTotal": 0, "match": true, "note": "読み取り不可"}}`,
             },
           ],
         },
@@ -219,12 +232,32 @@ ${categoryList}
     const parsed = JSON.parse(jsonMatch[0]);
     onProgress?.(100);
 
-    const items: ParsedReceiptItem[] = (parsed.items || [])
+    let items: ParsedReceiptItem[] = (parsed.items || [])
       .filter((item: ParsedReceiptItem) => item.name && typeof item.amount === 'number' && item.amount > 0)
       .map((item: ParsedReceiptItem) => ({
         ...item,
+        amount: Math.round(item.amount), // 整数に丸める
         name: halfToFullKana(item.name).trim(),
       }));
+
+    // 検算: レシート合計と品目合計の差異を検出・調整
+    const receiptTotal = parsed.receiptTotal || parsed.verification?.receiptTotal || 0;
+    if (receiptTotal > 0 && items.length > 0) {
+      const itemsSum = items.reduce((sum: number, item: ParsedReceiptItem) => sum + item.amount, 0);
+      const diff = receiptTotal - itemsSum;
+
+      if (diff !== 0 && Math.abs(diff) <= receiptTotal * 0.15) {
+        // 差額が合計の15%以内なら、最も金額の大きい品目に調整を加える
+        console.log(`Receipt verification: items sum=${itemsSum}, receipt total=${receiptTotal}, diff=${diff}. Adjusting.`);
+        const maxIdx = items.reduce((maxI: number, item: ParsedReceiptItem, i: number) =>
+          item.amount > items[maxI].amount ? i : maxI, 0);
+        items = items.map((item: ParsedReceiptItem, i: number) =>
+          i === maxIdx ? { ...item, amount: item.amount + diff } : item
+        );
+      } else if (diff !== 0) {
+        console.warn(`Receipt verification: large discrepancy. items sum=${itemsSum}, receipt total=${receiptTotal}, diff=${diff}`);
+      }
+    }
 
     // 日付のバリデーション
     let receiptDate = parsed.date || today;
