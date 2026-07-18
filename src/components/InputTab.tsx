@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { EXPENSE_CATS, INCOME_CATS } from '../constants';
 import type { Entry, Settings, ParsedReceiptItem } from '../types';
 import ReceiptUpload from './ReceiptUpload';
+import type { ReceiptResult } from './ReceiptUpload';
 
 interface InputTabProps {
   settings: Settings;
@@ -84,69 +85,80 @@ export default function InputTab({
     }
   };
 
-  const handleReceiptRegistered = async (result: {
-    user: string;
-    date: string;
-    memo: string;
-    items: ParsedReceiptItem[];
-    receiptStoragePath?: string;
-  }) => {
+  const handleReceiptRegistered = async (results: ReceiptResult[]) => {
     setShowReceiptUpload(false);
     setIsLoading(true);
 
+    let successCount = 0;
+    let totalItemCount = 0;
+
     try {
-      // レシート全体を1つのエントリとして登録
-      // 合計金額を計算
-      const totalAmount = result.items.reduce((sum, it) => sum + it.amount, 0);
+      for (const result of results) {
+        // レシート全体を1つのエントリとして登録
+        const totalAmount = result.items.reduce((sum, it) => sum + it.amount, 0);
 
-      // 品目の詳細をメモに格納
-      const detailLines = result.items.map((it) =>
-        `${it.name} ¥${it.amount.toLocaleString()} [${it.category}]`
-      ).join('｜');
+        // 品目の詳細をメモに格納
+        const detailLines = result.items.map((it) =>
+          `${it.name} ¥${it.amount.toLocaleString()} [${it.category}]`
+        ).join('｜');
 
-      const receiptLabel = result.memo || 'レシート';
-      const memoStr = `【${receiptLabel} ${result.items.length}品】${detailLines}`;
+        const receiptLabel = result.memo || 'レシート';
+        const memoStr = `【${receiptLabel} ${result.items.length}品】${detailLines}`;
 
-      // 最も金額が大きいカテゴリを代表カテゴリにする
-      const catTotals: Record<string, number> = {};
-      for (const item of result.items) {
-        catTotals[item.category] = (catTotals[item.category] || 0) + item.amount;
-      }
-      const mainCategory = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || '食費';
+        // 最も金額が大きいカテゴリを代表カテゴリにする
+        const catTotals: Record<string, number> = {};
+        for (const item of result.items) {
+          catTotals[item.category] = (catTotals[item.category] || 0) + item.amount;
+        }
+        const mainCategory = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || '食費';
 
-      const newEntry = {
-        user_name: result.user,
-        type: 'expense' as const,
-        category: mainCategory,
-        amount: totalAmount,
-        memo: memoStr,
-        date: result.date,
-        ...(result.receiptStoragePath ? { receipt_url: result.receiptStoragePath } : {}),
-      };
+        const newEntry = {
+          user_name: result.user,
+          type: 'expense' as const,
+          category: mainCategory,
+          amount: totalAmount,
+          memo: memoStr,
+          date: result.date,
+          ...(result.receiptStoragePath ? { receipt_url: result.receiptStoragePath } : {}),
+        };
 
-      // まずreceipt_url付きで試す。カラムがなければreceipt_urlなしで再試行
-      let insertResult = await supabase
-        .from('entries')
-        .insert([newEntry])
-        .select();
-
-      if (insertResult.error && result.receiptStoragePath) {
-        // receipt_urlカラムが存在しない場合、除外して再試行
-        const { receipt_url: _unused, ...entryWithoutReceipt } = newEntry;
-        void _unused;
-        insertResult = await supabase
+        // まずreceipt_url付きで試す。カラムがなければreceipt_urlなしで再試行
+        let insertResult = await supabase
           .from('entries')
-          .insert([entryWithoutReceipt])
+          .insert([newEntry])
           .select();
+
+        if (insertResult.error && result.receiptStoragePath) {
+          const { receipt_url: _unused, ...entryWithoutReceipt } = newEntry;
+          void _unused;
+          insertResult = await supabase
+            .from('entries')
+            .insert([entryWithoutReceipt])
+            .select();
+        }
+
+        const { data, error } = insertResult;
+
+        if (error) {
+          console.error('Error adding receipt entry:', error);
+          continue;
+        }
+
+        if (data) {
+          data.forEach((entry) => onEntryAdded(entry as Entry));
+          successCount++;
+          totalItemCount += result.items.length;
+        }
       }
 
-      const { data, error } = insertResult;
-
-      if (error) throw error;
-
-      if (data) {
-        data.forEach((entry) => onEntryAdded(entry as Entry));
-        showToast(`レシート（${result.items.length}品）を登録しました`);
+      if (successCount > 0) {
+        if (results.length === 1) {
+          showToast(`レシート（${totalItemCount}品）を登録しました`);
+        } else {
+          showToast(`${successCount}枚のレシート（${totalItemCount}品）を登録しました`);
+        }
+      } else {
+        showToast('レシート登録に失敗しました');
       }
     } catch (error) {
       console.error('Error adding receipt items:', error);

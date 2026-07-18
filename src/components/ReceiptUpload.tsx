@@ -1,22 +1,41 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { parseReceipt } from '../lib/receiptParser';
 import { EXPENSE_CATS, findCat } from '../constants';
 import type { ParsedReceiptItem, ParsedReceiptResult, Settings } from '../types';
 
+/** 個別レシートの状態 */
+interface ReceiptEntry {
+  id: number;
+  file: File;
+  preview: string;
+  status: 'pending' | 'processing' | 'done' | 'error';
+  items: ParsedReceiptItem[];
+  date: string;
+  storeName: string;
+  storagePath: string | null;
+  error?: string;
+  expanded: boolean;
+}
+
+/** 登録結果の型 */
+export interface ReceiptResult {
+  user: string;
+  date: string;
+  memo: string;
+  items: ParsedReceiptItem[];
+  receiptStoragePath?: string;
+}
+
 interface ReceiptUploadProps {
   settings: Settings;
   currentUser: string;
   currentDate: string;
-  onReceiptRegistered: (result: {
-    user: string;
-    date: string;
-    memo: string;
-    items: ParsedReceiptItem[];
-    receiptStoragePath?: string;
-  }) => void;
+  onReceiptRegistered: (results: ReceiptResult[]) => void;
   onClose: () => void;
 }
+
+let nextId = 1;
 
 export default function ReceiptUpload({
   settings,
@@ -31,19 +50,12 @@ export default function ReceiptUpload({
     settings.user3Name || 'ユーザー3',
   ];
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [items, setItems] = useState<ParsedReceiptItem[]>([]);
-  const [receiptDate, setReceiptDate] = useState<string>(currentDate);
-  const [storeName, setStoreName] = useState<string>('');
-  const [receiptMemo, setReceiptMemo] = useState<string>('');
+  const [receipts, setReceipts] = useState<ReceiptEntry[]>([]);
   const [selectedUser, setSelectedUser] = useState<string>(currentUser);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [currentProcessing, setCurrentProcessing] = useState<number>(0);
   const [toast, setToast] = useState<string | null>(null);
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [errorDetail, setErrorDetail] = useState<string | null>(null);
-  const [receiptStoragePath, setReceiptStoragePath] = useState<string | null>(null);
+  const [editingItem, setEditingItem] = useState<{ receiptId: number; itemIndex: number } | null>(null);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -53,129 +65,243 @@ export default function ReceiptUpload({
     setTimeout(() => setToast(null), 3000);
   };
 
+  // ファイル選択ハンドラ（複数対応）
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/') && !file.name.match(/\.(heic|heif)$/i)) {
-      showToast('画像ファイルを選択してください');
-      return;
-    }
-    setSelectedFile(file);
-    setErrorDetail(null);
-    const reader = new FileReader();
-    reader.onload = (event) => setPreview(event.target?.result as string);
-    reader.readAsDataURL(file);
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+
+    const newReceipts: ReceiptEntry[] = [];
+
+    Array.from(fileList).forEach((file) => {
+      if (!file.type.startsWith('image/') && !file.name.match(/\.(heic|heif)$/i)) {
+        return; // 画像以外はスキップ
+      }
+      const reader = new FileReader();
+      const id = nextId++;
+      reader.onload = (event) => {
+        const entry: ReceiptEntry = {
+          id,
+          file,
+          preview: event.target?.result as string,
+          status: 'pending',
+          items: [],
+          date: currentDate,
+          storeName: '',
+          storagePath: null,
+          expanded: false,
+        };
+        setReceipts((prev) => [...prev, entry]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // input値をリセット（同じファイルを再選択可能にする）
+    e.target.value = '';
   };
 
-  const handleUploadAndParse = async () => {
-    if (!selectedFile) { showToast('画像を選択してください'); return; }
+  // 全レシートを順次処理
+  const handleProcessAll = useCallback(async () => {
+    const pendingReceipts = receipts.filter((r) => r.status === 'pending');
+    if (pendingReceipts.length === 0) {
+      showToast('処理するレシートがありません');
+      return;
+    }
 
     setIsProcessing(true);
-    setProgress(0);
-    setErrorDetail(null);
+    setCurrentProcessing(0);
 
-    try {
-      // Storage upload
-      const [year, month] = currentDate.split('-');
-      const timestamp = Date.now();
-      const filename = `${timestamp}_${selectedFile.name}`;
-      const storagePath = `${year}-${month}/${filename}`;
-      const { error: uploadError } = await supabase.storage
-        .from('receipts')
-        .upload(storagePath, selectedFile);
-      if (uploadError) {
-        console.warn('Storage upload failed:', uploadError.message);
-      } else {
-        setReceiptStoragePath(storagePath);
-      }
+    for (let i = 0; i < pendingReceipts.length; i++) {
+      const receipt = pendingReceipts[i];
+      setCurrentProcessing(i + 1);
 
-      setProgress(30);
+      // ステータスを processing に更新
+      setReceipts((prev) =>
+        prev.map((r) => (r.id === receipt.id ? { ...r, status: 'processing' as const } : r))
+      );
 
-      const result: ParsedReceiptResult = await parseReceipt(selectedFile, (p) => {
-        setProgress(30 + Math.round(p * 0.6));
-      });
+      try {
+        // Storage upload
+        const [year, month] = currentDate.split('-');
+        const timestamp = Date.now();
+        const filename = `${timestamp}_${receipt.file.name}`;
+        const storagePath = `${year}-${month}/${filename}`;
+        let uploadedPath: string | null = null;
 
-      if (!result.items || result.items.length === 0) {
-        showToast('レシートから品目を検出できませんでした');
-        setItems([]);
-      } else {
+        const { error: uploadError } = await supabase.storage
+          .from('receipts')
+          .upload(storagePath, receipt.file);
+
+        if (!uploadError) {
+          uploadedPath = storagePath;
+        } else {
+          console.warn('Storage upload failed:', uploadError.message);
+        }
+
+        // OCR処理
+        const result: ParsedReceiptResult = await parseReceipt(receipt.file);
+
         const validCatNames = EXPENSE_CATS.map((c) => c.name);
-        const itemsNormalized = result.items.map((item) => ({
+        const itemsNormalized = (result.items || []).map((item) => ({
           ...item,
           category: validCatNames.includes(item.category) ? item.category : 'その他',
         }));
-        setItems(itemsNormalized);
+
+        setReceipts((prev) =>
+          prev.map((r) =>
+            r.id === receipt.id
+              ? {
+                  ...r,
+                  status: 'done' as const,
+                  items: itemsNormalized,
+                  date: result.date || currentDate,
+                  storeName: result.storeName || '',
+                  storagePath: uploadedPath,
+                  expanded: true,
+                }
+              : r
+          )
+        );
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error('Error processing receipt:', error);
+        setReceipts((prev) =>
+          prev.map((r) =>
+            r.id === receipt.id
+              ? { ...r, status: 'error' as const, error: msg }
+              : r
+          )
+        );
       }
+    }
 
-      // 日付と店舗名をセット
-      if (result.date) setReceiptDate(result.date);
-      if (result.storeName) setStoreName(result.storeName);
+    setIsProcessing(false);
+  }, [receipts, currentDate]);
 
-      setProgress(100);
+  // 個別レシートを再処理
+  const handleRetry = useCallback(async (receiptId: number) => {
+    const receipt = receipts.find((r) => r.id === receiptId);
+    if (!receipt) return;
+
+    setReceipts((prev) =>
+      prev.map((r) => (r.id === receiptId ? { ...r, status: 'processing' as const, error: undefined } : r))
+    );
+
+    try {
+      const result: ParsedReceiptResult = await parseReceipt(receipt.file);
+      const validCatNames = EXPENSE_CATS.map((c) => c.name);
+      const itemsNormalized = (result.items || []).map((item) => ({
+        ...item,
+        category: validCatNames.includes(item.category) ? item.category : 'その他',
+      }));
+
+      setReceipts((prev) =>
+        prev.map((r) =>
+          r.id === receiptId
+            ? { ...r, status: 'done' as const, items: itemsNormalized, date: result.date || currentDate, storeName: result.storeName || '', expanded: true }
+            : r
+        )
+      );
     } catch (error) {
-      console.error('Error processing receipt:', error);
       const msg = error instanceof Error ? error.message : String(error);
-      setErrorDetail(msg);
-      showToast('レシート処理に失敗しました');
-      setItems([]);
-    } finally {
-      setIsProcessing(false);
+      setReceipts((prev) =>
+        prev.map((r) =>
+          r.id === receiptId ? { ...r, status: 'error' as const, error: msg } : r
+        )
+      );
+    }
+  }, [receipts, currentDate]);
+
+  // レシート削除
+  const handleRemoveReceipt = (receiptId: number) => {
+    setReceipts((prev) => prev.filter((r) => r.id !== receiptId));
+  };
+
+  // 展開/折りたたみ
+  const toggleExpand = (receiptId: number) => {
+    setReceipts((prev) =>
+      prev.map((r) => (r.id === receiptId ? { ...r, expanded: !r.expanded } : r))
+    );
+  };
+
+  // 品目の編集
+  const handleUpdateItem = (receiptId: number, itemIndex: number, field: keyof ParsedReceiptItem, value: string | number) => {
+    setReceipts((prev) =>
+      prev.map((r) => {
+        if (r.id !== receiptId) return r;
+        const newItems = [...r.items];
+        if (field === 'amount') {
+          newItems[itemIndex] = { ...newItems[itemIndex], amount: parseFloat(String(value)) || 0 };
+        } else {
+          newItems[itemIndex] = { ...newItems[itemIndex], [field]: value };
+        }
+        return { ...r, items: newItems };
+      })
+    );
+  };
+
+  // 品目の削除
+  const handleRemoveItem = (receiptId: number, itemIndex: number) => {
+    setReceipts((prev) =>
+      prev.map((r) => {
+        if (r.id !== receiptId) return r;
+        return { ...r, items: r.items.filter((_, i) => i !== itemIndex) };
+      })
+    );
+    if (editingItem?.receiptId === receiptId && editingItem?.itemIndex === itemIndex) {
+      setEditingItem(null);
     }
   };
 
-  const handleRemoveItem = (index: number) => {
-    setItems(items.filter((_, i) => i !== index));
-    if (editingIndex === index) setEditingIndex(null);
+  // 日付の変更
+  const handleDateChange = (receiptId: number, newDate: string) => {
+    setReceipts((prev) =>
+      prev.map((r) => (r.id === receiptId ? { ...r, date: newDate } : r))
+    );
   };
 
-  const handleUpdateItem = (index: number, field: keyof ParsedReceiptItem, value: string | number) => {
-    const updatedItems = [...items];
-    if (field === 'amount') {
-      updatedItems[index] = { ...updatedItems[index], amount: parseFloat(String(value)) || 0 };
-    } else {
-      updatedItems[index] = { ...updatedItems[index], [field]: value };
+  // 全登録
+  const handleConfirmAll = () => {
+    const doneReceipts = receipts.filter((r) => r.status === 'done' && r.items.length > 0);
+    if (doneReceipts.length === 0) {
+      showToast('登録できるレシートがありません');
+      return;
     }
-    setItems(updatedItems);
-  };
 
-  const totalAmount = items.reduce((sum, item) => sum + item.amount, 0);
-
-  // カテゴリ別にグループ化（表示用）
-  const groupedItems = useMemo(() => {
-    const groups: Record<string, { items: (ParsedReceiptItem & { originalIndex: number })[]; total: number }> = {};
-    items.forEach((item, i) => {
-      const cat = item.category;
-      if (!groups[cat]) groups[cat] = { items: [], total: 0 };
-      groups[cat].items.push({ ...item, originalIndex: i });
-      groups[cat].total += item.amount;
-    });
-    return groups;
-  }, [items]);
-
-  const handleConfirm = () => {
-    const validItems = items.filter((item) => item.name && item.amount > 0);
-    if (validItems.length === 0) { showToast('有効な品目を入力してください'); return; }
-    onReceiptRegistered({
+    const results: ReceiptResult[] = doneReceipts.map((r) => ({
       user: selectedUser,
-      date: receiptDate,
-      memo: receiptMemo || storeName || '',
-      items: validItems,
-      receiptStoragePath: receiptStoragePath || undefined,
-    });
+      date: r.date,
+      memo: r.storeName || '',
+      items: r.items.filter((item) => item.name && item.amount > 0),
+      receiptStoragePath: r.storagePath || undefined,
+    }));
+
+    onReceiptRegistered(results);
   };
+
+  // 集計
+  const doneReceipts = receipts.filter((r) => r.status === 'done' && r.items.length > 0);
+  const pendingCount = receipts.filter((r) => r.status === 'pending').length;
+  const errorCount = receipts.filter((r) => r.status === 'error').length;
+  const totalItems = doneReceipts.reduce((sum, r) => sum + r.items.length, 0);
+  const totalAmount = doneReceipts.reduce(
+    (sum, r) => sum + r.items.reduce((s, it) => s + it.amount, 0),
+    0
+  );
 
   const getCategoryIcon = (catName: string) => findCat(catName)?.icon || '📦';
-
-  const resetFile = () => {
-    setPreview(null); setSelectedFile(null); setItems([]); setErrorDetail(null);
-    setStoreName(''); setReceiptDate(currentDate); setReceiptStoragePath(null);
-    if (cameraInputRef.current) cameraInputRef.current.value = '';
-    if (galleryInputRef.current) galleryInputRef.current.value = '';
-  };
 
   const getUserColor = (name: string, idx: number) => {
     const colors = ['#3B82F6', '#EF4444', '#8B5CF6'];
     return name === selectedUser ? colors[idx] : undefined;
+  };
+
+  const statusIcon = (status: ReceiptEntry['status']) => {
+    switch (status) {
+      case 'pending': return '⏳';
+      case 'processing': return '🔄';
+      case 'done': return '✅';
+      case 'error': return '❌';
+    }
   };
 
   return (
@@ -186,267 +312,312 @@ export default function ReceiptUpload({
           <button onClick={onClose} className="close-btn">✕</button>
         </div>
 
-        {toast && <div style={{
-          background: '#1a1a1a', color: '#fff', padding: '8px 16px',
-          borderRadius: 8, fontSize: 13, textAlign: 'center', marginBottom: 12
-        }}>{toast}</div>}
+        {toast && (
+          <div style={{
+            background: '#1a1a1a', color: '#fff', padding: '8px 16px',
+            borderRadius: 8, fontSize: 13, textAlign: 'center', marginBottom: 12,
+          }}>{toast}</div>
+        )}
 
         {/* Hidden file inputs */}
         <input ref={cameraInputRef} type="file" accept="image/*" capture="environment"
           onChange={handleFileSelect} style={{ display: 'none' }} />
-        <input ref={galleryInputRef} type="file" accept="image/*,.heic,.heif"
+        <input ref={galleryInputRef} type="file" accept="image/*,.heic,.heif" multiple
           onChange={handleFileSelect} style={{ display: 'none' }} />
 
-        {/* Source Selection */}
-        {!preview && (
+        {/* Source Selection: always visible to add more */}
+        <div className="receipt-section">
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={() => cameraInputRef.current?.click()} className="receipt-source-btn">
+              <span style={{ fontSize: 24 }}>&#128247;</span>
+              <span>カメラで撮影</span>
+            </button>
+            <button type="button" onClick={() => galleryInputRef.current?.click()} className="receipt-source-btn">
+              <span style={{ fontSize: 24 }}>&#128444;&#65039;</span>
+              <span>写真から選択</span>
+              <span style={{ fontSize: 10, color: '#999' }}>複数選択可</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Receipt Thumbnails */}
+        {receipts.length > 0 && (
           <div className="receipt-section">
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" onClick={() => cameraInputRef.current?.click()} className="receipt-source-btn">
-                <span style={{ fontSize: 24 }}>&#128247;</span>
-                <span>カメラで撮影</span>
-              </button>
-              <button type="button" onClick={() => galleryInputRef.current?.click()} className="receipt-source-btn">
-                <span style={{ fontSize: 24 }}>&#128444;&#65039;</span>
-                <span>写真から選択</span>
-              </button>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#999', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              レシート一覧 ({receipts.length}枚)
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))', gap: 8 }}>
+              {receipts.map((r) => (
+                <div key={r.id} style={{ position: 'relative' }}>
+                  <img
+                    src={r.preview}
+                    alt=""
+                    style={{
+                      width: '100%', height: 80, objectFit: 'cover', borderRadius: 8,
+                      border: r.status === 'error' ? '2px solid #E74C3C' : r.status === 'done' ? '2px solid #27AE60' : '2px solid #e0e0e0',
+                      opacity: r.status === 'processing' ? 0.6 : 1,
+                    }}
+                  />
+                  <span style={{
+                    position: 'absolute', top: 2, right: 2, fontSize: 14,
+                    background: 'rgba(255,255,255,0.85)', borderRadius: 4, padding: '0 2px',
+                  }}>{statusIcon(r.status)}</span>
+                  {r.status !== 'processing' && (
+                    <button
+                      onClick={() => handleRemoveReceipt(r.id)}
+                      style={{
+                        position: 'absolute', top: 2, left: 2, background: 'rgba(0,0,0,0.5)',
+                        color: '#fff', border: 'none', borderRadius: '50%', width: 18, height: 18,
+                        fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >✕</button>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* Image Preview */}
-        {preview && (
-          <div className="receipt-section">
-            <img src={preview} alt="レシート" className="receipt-preview" />
-            <button type="button" onClick={resetFile} className="btn-secondary" style={{ fontSize: 12 }}>
-              画像を変更
-            </button>
-          </div>
-        )}
-
-        {/* Error Detail */}
-        {errorDetail && (
-          <div style={{
-            background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8,
-            padding: '8px 12px', fontSize: 11, color: '#B91C1C', marginBottom: 12, wordBreak: 'break-all'
-          }}>{errorDetail}</div>
-        )}
-
-        {/* Process Button */}
-        {preview && items.length === 0 && !isProcessing && (
-          <button onClick={handleUploadAndParse} className="btn-add" style={{ marginBottom: 12 }}>
-            レシートを読み取る
-          </button>
-        )}
-
-        {/* Loading Animation with Pixel Art Ragdoll Cat */}
+        {/* Processing Progress */}
         {isProcessing && (
           <div className="receipt-section">
             <div className="loading-cat-container">
               <div className="loading-cat-track">
                 <div className="pixel-cat-runner">
                   <svg width="48" height="36" viewBox="0 0 24 18" style={{ imageRendering: 'pixelated' }}>
-                    {/* Frame 1: front legs extended — cat faces RIGHT (head=right, tail=left) */}
                     <g className="cat-frame cat-frame-1">
-                      {/* Tail - dark brown, fluffy, left side */}
                       <rect x="0" y="3" width="2" height="2" fill="#5C3A1E"/>
                       <rect x="1" y="4" width="2" height="3" fill="#5C3A1E"/>
                       <rect x="3" y="6" width="2" height="2" fill="#6B4226"/>
                       <rect x="5" y="8" width="2" height="2" fill="#6B4226"/>
-                      {/* Body - cream with brown saddle */}
                       <rect x="7" y="8" width="11" height="4" fill="#F5E6D0"/>
                       <rect x="9" y="8" width="7" height="2" fill="#B8875A"/>
-                      {/* White belly */}
                       <rect x="10" y="10" width="6" height="2" fill="#FFFFFF"/>
-                      {/* Head - dark brown mask top, white muzzle */}
                       <rect x="14" y="2" width="9" height="6" fill="#F5E6D0"/>
                       <rect x="15" y="2" width="7" height="3" fill="#6B4226"/>
-                      {/* Ears - dark chocolate */}
                       <rect x="15" y="0" width="2" height="2" fill="#5C3A1E"/>
                       <rect x="20" y="0" width="2" height="2" fill="#5C3A1E"/>
                       <rect x="16" y="0" width="1" height="1" fill="#FFB6C1"/>
                       <rect x="21" y="0" width="1" height="1" fill="#FFB6C1"/>
-                      {/* Eyes - blue */}
                       <rect x="16" y="3" width="2" height="2" fill="#4A90D9"/>
                       <rect x="19" y="3" width="2" height="2" fill="#4A90D9"/>
-                      {/* Nose - pink */}
                       <rect x="18" y="5" width="1" height="1" fill="#FFB6C1"/>
-                      {/* White chin */}
                       <rect x="16" y="6" width="5" height="1" fill="#FFFFFF"/>
-                      {/* Front legs (right side) - stretched forward */}
                       <rect x="17" y="12" width="2" height="3" fill="#FFFFFF"/>
                       <rect x="19" y="14" width="2" height="2" fill="#FFFFFF"/>
-                      {/* Back legs (left side) - tucked */}
                       <rect x="9" y="12" width="2" height="2" fill="#FFFFFF"/>
                       <rect x="7" y="14" width="2" height="2" fill="#FFFFFF"/>
                     </g>
-                    {/* Frame 2: legs swapped — cat faces RIGHT */}
                     <g className="cat-frame cat-frame-2">
-                      {/* Tail - slightly different angle */}
                       <rect x="0" y="4" width="2" height="2" fill="#5C3A1E"/>
                       <rect x="1" y="5" width="2" height="3" fill="#5C3A1E"/>
                       <rect x="3" y="7" width="2" height="2" fill="#6B4226"/>
                       <rect x="5" y="9" width="2" height="2" fill="#6B4226"/>
-                      {/* Body */}
                       <rect x="7" y="9" width="11" height="4" fill="#F5E6D0"/>
                       <rect x="9" y="9" width="7" height="2" fill="#B8875A"/>
                       <rect x="10" y="11" width="6" height="2" fill="#FFFFFF"/>
-                      {/* Head */}
                       <rect x="14" y="3" width="9" height="6" fill="#F5E6D0"/>
                       <rect x="15" y="3" width="7" height="3" fill="#6B4226"/>
-                      {/* Ears */}
                       <rect x="15" y="1" width="2" height="2" fill="#5C3A1E"/>
                       <rect x="20" y="1" width="2" height="2" fill="#5C3A1E"/>
                       <rect x="16" y="1" width="1" height="1" fill="#FFB6C1"/>
                       <rect x="21" y="1" width="1" height="1" fill="#FFB6C1"/>
-                      {/* Eyes */}
                       <rect x="16" y="4" width="2" height="2" fill="#4A90D9"/>
                       <rect x="19" y="4" width="2" height="2" fill="#4A90D9"/>
-                      {/* Nose */}
                       <rect x="18" y="6" width="1" height="1" fill="#FFB6C1"/>
                       <rect x="16" y="7" width="5" height="1" fill="#FFFFFF"/>
-                      {/* Front legs - tucked */}
                       <rect x="16" y="13" width="2" height="2" fill="#FFFFFF"/>
                       <rect x="14" y="14" width="2" height="2" fill="#FFFFFF"/>
-                      {/* Back legs - extended */}
                       <rect x="8" y="13" width="2" height="3" fill="#FFFFFF"/>
                       <rect x="6" y="14" width="2" height="2" fill="#FFFFFF"/>
                     </g>
                   </svg>
                 </div>
               </div>
-              {/* Progress bar */}
               <div className="progress-bar" style={{ height: 8, borderRadius: 4 }}>
-                <div className="progress-fill loading-bar-smooth" />
+                <div style={{
+                  background: 'linear-gradient(90deg, #1a1a1a 0%, #555 100%)',
+                  height: '100%', borderRadius: 4, transition: 'width 0.5s ease',
+                  width: `${(currentProcessing / receipts.filter((r) => r.status !== 'done').length) * 100}%`,
+                }} />
               </div>
             </div>
             <p style={{ textAlign: 'center', fontSize: 12, color: '#666', marginTop: 8 }}>
-              レシートを読み取っています...
+              {currentProcessing} / {receipts.filter((r) => r.status === 'pending' || r.status === 'processing').length + currentProcessing - 1} 枚目を処理中...
             </p>
           </div>
         )}
 
-        {/* Results */}
-        {items.length > 0 && (
-          <>
-            {/* User / Date / Memo Selection */}
-            <div className="receipt-section" style={{ background: '#f8f9fa', borderRadius: 10, padding: 12, marginBottom: 12 }}>
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#999', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>計上者</div>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  {userNames.map((name, i) => (
-                    <button
-                      key={name}
-                      type="button"
-                      onClick={() => setSelectedUser(name)}
-                      style={{
-                        flex: 1, padding: '6px 4px', border: `2px solid ${getUserColor(name, i) || '#e0e0e0'}`,
-                        borderRadius: 8, background: getUserColor(name, i) ? `${getUserColor(name, i)}10` : '#fff',
-                        color: getUserColor(name, i) || '#999', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                      }}
-                    >
-                      {name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#999', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.5px' }}>日付</div>
-                  <input
-                    type="date"
-                    value={receiptDate}
-                    onChange={(e) => setReceiptDate(e.target.value)}
-                    className="form-input"
-                    style={{ fontSize: 13, padding: '6px 8px' }}
-                  />
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#999', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.5px' }}>メモ</div>
-                  <input
-                    type="text"
-                    value={receiptMemo}
-                    onChange={(e) => setReceiptMemo(e.target.value)}
-                    placeholder={storeName || '任意'}
-                    className="form-input"
-                    style={{ fontSize: 13, padding: '6px 8px' }}
-                  />
-                </div>
-              </div>
-
-              {storeName && (
-                <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
-                  店舗: {storeName}
-                </div>
-              )}
-            </div>
-
-            {/* Items */}
-            <div className="receipt-section">
-              <div className="receipt-items-header">
-                <h3>読取結果 ({items.length}件)</h3>
-                <span style={{ fontSize: 15, fontWeight: 700 }}>合計 ¥{totalAmount.toLocaleString()}</span>
-              </div>
-
-              {Object.entries(groupedItems).map(([catName, group]) => (
-                <div key={catName} className="receipt-cat-group">
-                  <div className="receipt-cat-title">
-                    <h4>{getCategoryIcon(catName)} {catName}</h4>
-                    <span className="cat-total">¥{group.total.toLocaleString()}</span>
-                  </div>
-                  {group.items.map((item) => (
-                    <div key={item.originalIndex}>
-                      {editingIndex === item.originalIndex ? (
-                        <div style={{ display: 'flex', gap: 4, alignItems: 'center', padding: '4px 0', flexWrap: 'wrap' }}>
-                          <input type="text" value={item.name}
-                            onChange={(e) => handleUpdateItem(item.originalIndex, 'name', e.target.value)}
-                            className="form-input" style={{ flex: 1, minWidth: 80, fontSize: 12, padding: '4px 6px' }} />
-                          <input type="number" value={item.amount || ''}
-                            onChange={(e) => handleUpdateItem(item.originalIndex, 'amount', e.target.value)}
-                            className="form-input" style={{ width: 70, fontSize: 12, padding: '4px 6px', textAlign: 'right' }} />
-                          <select value={item.category}
-                            onChange={(e) => handleUpdateItem(item.originalIndex, 'category', e.target.value)}
-                            className="form-input" style={{ width: 90, fontSize: 11, padding: '4px 4px' }}>
-                            {EXPENSE_CATS.map((cat) => (
-                              <option key={cat.id} value={cat.name}>{cat.icon} {cat.name}</option>
-                            ))}
-                          </select>
-                          <button onClick={() => setEditingIndex(null)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#3B82F6', fontWeight: 600 }}>
-                            OK
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="receipt-cat-item" onClick={() => setEditingIndex(item.originalIndex)} style={{ cursor: 'pointer' }}>
-                          <span>{item.name}</span>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            ¥{item.amount.toLocaleString()}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleRemoveItem(item.originalIndex); }}
-                              style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: 12 }}>
-                              ✕
-                            </button>
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ))}
-
-              <p style={{ fontSize: 10, color: '#999', marginTop: 8, textAlign: 'center' }}>
-                品目をタップすると名前・金額・カテゴリを編集できます
-              </p>
-            </div>
-          </>
+        {/* Process Button */}
+        {!isProcessing && pendingCount > 0 && (
+          <button onClick={handleProcessAll} className="btn-add" style={{ marginBottom: 12, width: '100%' }}>
+            {pendingCount === 1 ? 'レシートを読み取る' : `${pendingCount}枚のレシートを読み取る`}
+          </button>
         )}
 
-        {/* Action Buttons */}
+        {/* User Selection (show when there are results) */}
+        {doneReceipts.length > 0 && (
+          <div className="receipt-section" style={{ background: '#f8f9fa', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+            <div style={{ marginBottom: 4 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#999', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>計上者</div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {userNames.map((name, i) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => setSelectedUser(name)}
+                    style={{
+                      flex: 1, padding: '6px 4px', border: `2px solid ${getUserColor(name, i) || '#e0e0e0'}`,
+                      borderRadius: 8, background: getUserColor(name, i) ? `${getUserColor(name, i)}10` : '#fff',
+                      color: getUserColor(name, i) || '#999', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Results per receipt */}
+        {receipts.filter((r) => r.status === 'done' || r.status === 'error').map((receipt) => (
+          <div key={receipt.id} className="receipt-section" style={{
+            border: receipt.status === 'error' ? '1px solid #FECACA' : '1px solid #e0e0e0',
+            borderRadius: 10, padding: 12, marginBottom: 8,
+            background: receipt.status === 'error' ? '#FEF2F2' : '#fff',
+          }}>
+            {/* Receipt header */}
+            <div
+              onClick={() => toggleExpand(receipt.id)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
+            >
+              <img src={receipt.preview} alt="" style={{ width: 40, height: 50, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#1a1a1a' }}>
+                  {receipt.storeName || '不明な店舗'}
+                </div>
+                {receipt.status === 'done' && (
+                  <>
+                    <div style={{ fontSize: 11, color: '#888' }}>
+                      {receipt.date} ・ {receipt.items.length}品
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#E74C3C' }}>
+                      ¥{receipt.items.reduce((s, it) => s + it.amount, 0).toLocaleString()}
+                    </div>
+                  </>
+                )}
+                {receipt.status === 'error' && (
+                  <div style={{ fontSize: 11, color: '#B91C1C' }}>
+                    {receipt.error}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                {receipt.status === 'error' && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleRetry(receipt.id); }}
+                    style={{ background: '#E74C3C', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 8px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                  >再試行</button>
+                )}
+                <span style={{ fontSize: 12, color: '#999', transform: receipt.expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▼</span>
+              </div>
+            </div>
+
+            {/* Expanded content */}
+            {receipt.expanded && receipt.status === 'done' && (
+              <div style={{ marginTop: 12 }}>
+                {/* Date edit */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: '#999', fontWeight: 600 }}>日付:</span>
+                  <input
+                    type="date"
+                    value={receipt.date}
+                    onChange={(e) => handleDateChange(receipt.id, e.target.value)}
+                    className="form-input"
+                    style={{ fontSize: 12, padding: '4px 6px', flex: 1 }}
+                  />
+                </div>
+
+                {/* Items */}
+                {receipt.items.map((item, idx) => (
+                  <div key={idx}>
+                    {editingItem?.receiptId === receipt.id && editingItem?.itemIndex === idx ? (
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center', padding: '4px 0', flexWrap: 'wrap' }}>
+                        <input type="text" value={item.name}
+                          onChange={(e) => handleUpdateItem(receipt.id, idx, 'name', e.target.value)}
+                          className="form-input" style={{ flex: 1, minWidth: 80, fontSize: 12, padding: '4px 6px' }} />
+                        <input type="number" value={item.amount || ''}
+                          onChange={(e) => handleUpdateItem(receipt.id, idx, 'amount', e.target.value)}
+                          className="form-input" style={{ width: 70, fontSize: 12, padding: '4px 6px', textAlign: 'right' }} />
+                        <select value={item.category}
+                          onChange={(e) => handleUpdateItem(receipt.id, idx, 'category', e.target.value)}
+                          className="form-input" style={{ width: 90, fontSize: 11, padding: '4px 4px' }}>
+                          {EXPENSE_CATS.map((cat) => (
+                            <option key={cat.id} value={cat.name}>{cat.icon} {cat.name}</option>
+                          ))}
+                        </select>
+                        <button onClick={() => setEditingItem(null)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#3B82F6', fontWeight: 600 }}>
+                          OK
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        className="receipt-cat-item"
+                        onClick={() => setEditingItem({ receiptId: receipt.id, itemIndex: idx })}
+                        style={{ cursor: 'pointer', padding: '5px 0', borderBottom: '1px solid #f0f0f0' }}
+                      >
+                        <span style={{ fontSize: 12 }}>
+                          {getCategoryIcon(item.category)} {item.name}
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                          ¥{item.amount.toLocaleString()}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleRemoveItem(receipt.id, idx); }}
+                            style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: 11 }}>
+                            ✕
+                          </button>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <p style={{ fontSize: 10, color: '#999', marginTop: 6, textAlign: 'center' }}>
+                  品目をタップして編集
+                </p>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* Summary & Action Buttons */}
+        {doneReceipts.length > 0 && (
+          <div style={{
+            background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10,
+            padding: 12, marginBottom: 12, textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 12, color: '#666' }}>
+              {doneReceipts.length}枚のレシート ・ {totalItems}品
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: '#1a1a1a' }}>
+              合計 ¥{totalAmount.toLocaleString()}
+            </div>
+            {errorCount > 0 && (
+              <div style={{ fontSize: 11, color: '#E74C3C', marginTop: 4 }}>
+                {errorCount}枚のレシートでエラーが発生しています
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="receipt-actions">
           <button onClick={onClose} className="btn-secondary">キャンセル</button>
-          {items.length > 0 && (
-            <button onClick={handleConfirm} className="btn-add">
-              {items.length}件を登録
+          {doneReceipts.length > 0 && (
+            <button onClick={handleConfirmAll} className="btn-add">
+              {doneReceipts.length === 1
+                ? `${totalItems}件を登録`
+                : `${doneReceipts.length}枚・${totalItems}件を登録`}
             </button>
           )}
         </div>
