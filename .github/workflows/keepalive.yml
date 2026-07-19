@@ -1,0 +1,31 @@
+name: Supabase Keep-Alive
+
+# Supabaseの無料プランは7日間アクセスがないと自動停止するため、
+# 定期的にDBへアクセスして停止を防ぐ。
+
+on:
+  schedule:
+    # 毎日 UTC 0:00 (日本時間 9:00) に実行
+    - cron: '0 0 * * *'
+  workflow_dispatch: # 手動実行も可能
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          echo "Pinging Supabase to prevent auto-pause..."
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://cufgfhmohohwnwgubzsl.supabase.co/rest/v1/entries?select=id&limit=1" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}")
+          echo "HTTP status: $HTTP_CODE"
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 400 ]; then
+            echo "✅ Supabase is alive."
+          else
+            echo "⚠️ Unexpected status code: $HTTP_CODE"
+            exit 1
+          fi
+        env:
+          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN1ZmdmaG1vaG9od253Z3VienNsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODE4NjUsImV4cCI6MjA5MDI1Nzg2NX0.P5Wrdpkul_WJR3xG2ibZ9cU7T-xCY0CnFeE8YbHI9bc
