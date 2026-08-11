@@ -9,6 +9,7 @@ import InputTab from './components/InputTab';
 import ListTab from './components/ListTab';
 import FixedTab from './components/FixedTab';
 import SummaryTab from './components/SummaryTab';
+import AnalysisTab from './components/AnalysisTab';
 import SettingsTab from './components/SettingsTab';
 import './App.css';
 
@@ -244,6 +245,13 @@ export default function App() {
         )}
         {activeTab === 'summary' && (
           <SummaryTab
+            entries={entries}
+            settings={settings}
+            currentMonth={currentMonth}
+          />
+        )}
+        {activeTab === 'analysis' && (
+          <AnalysisTab
             entries={entries}
             settings={settings}
             currentMonth={currentMonth}

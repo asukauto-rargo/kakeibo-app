@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { EXPENSE_CATS, INCOME_CATS } from '../constants';
-import type { Entry, Settings, ParsedReceiptItem } from '../types';
+import type { Entry, Settings } from '../types';
 import ReceiptUpload from './ReceiptUpload';
 import type { ReceiptResult } from './ReceiptUpload';
 

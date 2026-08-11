@@ -21,6 +21,8 @@ export default function ListTab({
   const [selectedCategory, setSelectedCategory] = useState<string>('全カテゴリ');
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; timer: ReturnType<typeof setTimeout> } | null>(null);
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
   const [receiptImageUrl, setReceiptImageUrl] = useState<string | null>(null);
@@ -54,8 +56,30 @@ export default function ListTab({
         return catToName(entry.category) === selectedCategory;
       })
       .filter((entry) => !selectedDate || entry.date === selectedDate)
+      .filter((entry) => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return true;
+        // メモ全体・カテゴリ名・品目名で検索
+        const inMemo = (entry.memo || '').toLowerCase().includes(q);
+        const inCat = catToName(entry.category).toLowerCase().includes(q);
+        return inMemo || inCat;
+      })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [entries, currentMonth, selectedUser, selectedType, selectedCategory, selectedDate]);
+  }, [entries, currentMonth, selectedUser, selectedType, selectedCategory, selectedDate, searchQuery]);
+
+  // カレンダー用: 当月の日別支出合計
+  const dailyTotals = useMemo(() => {
+    const totals: Record<number, number> = {};
+    for (const entry of entries) {
+      if (entry.type !== 'expense') continue;
+      if (!entry.date?.startsWith(currentMonth)) continue;
+      if (selectedUser !== '全員' && resolveUserName(entry.user_name) !== selectedUser) continue;
+      const day = parseInt(entry.date.split('-')[2], 10);
+      totals[day] = (totals[day] || 0) + entry.amount;
+    }
+    return totals;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, currentMonth, selectedUser]);
 
   const handleDeleteClick = (id: string) => {
     if (deleteConfirm?.id === id) {
@@ -170,6 +194,31 @@ export default function ListTab({
           </div>
         </div>
       )}
+      {/* View mode toggle */}
+      <div className="summary-toggle-wrap" style={{ marginBottom: 10 }}>
+        <button className={`toggle-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')}>
+          📋 リスト
+        </button>
+        <button className={`toggle-btn ${viewMode === 'calendar' ? 'active' : ''}`} onClick={() => setViewMode('calendar')}>
+          📅 カレンダー
+        </button>
+      </div>
+
+      {/* Search box */}
+      <div className="list-search-wrap">
+        <span className="list-search-icon">🔍</span>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="品目・メモ・カテゴリで検索"
+          className="list-search-input"
+        />
+        {searchQuery && (
+          <button className="list-search-clear" onClick={() => setSearchQuery('')}>✕</button>
+        )}
+      </div>
+
       {/* Filter Section */}
       <div className="filter-group">
         <div className="filter-row" style={{ marginBottom: 4 }}>
@@ -250,7 +299,60 @@ export default function ListTab({
         )}
       </div>
 
+      {/* Calendar View */}
+      {viewMode === 'calendar' && (() => {
+        const [y, m] = currentMonth.split('-').map(Number);
+        const daysInMonth = new Date(y, m, 0).getDate();
+        const firstWeekday = new Date(y, m - 1, 1).getDay(); // 0=日
+        const monthTotal = Object.values(dailyTotals).reduce((s, v) => s + v, 0);
+        const maxDay = Math.max(...Object.values(dailyTotals), 1);
+        const cells: (number | null)[] = [];
+        for (let i = 0; i < firstWeekday; i++) cells.push(null);
+        for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+        const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        return (
+          <div className="calendar-wrap">
+            <div className="calendar-monthtotal">
+              今月の支出 <strong>¥{monthTotal.toLocaleString()}</strong>
+            </div>
+            <div className="calendar-grid calendar-head">
+              {weekdays.map((w, i) => (
+                <div key={w} className="calendar-weekday" style={{ color: i === 0 ? '#E74C3C' : i === 6 ? '#3B82F6' : '#999' }}>{w}</div>
+              ))}
+            </div>
+            <div className="calendar-grid">
+              {cells.map((d, i) => {
+                if (d === null) return <div key={`e${i}`} className="calendar-cell empty" />;
+                const dateStr = `${currentMonth}-${String(d).padStart(2, '0')}`;
+                const amount = dailyTotals[d] || 0;
+                const intensity = amount > 0 ? 0.12 + (amount / maxDay) * 0.5 : 0;
+                const isToday = dateStr === todayStr;
+                return (
+                  <button
+                    key={d}
+                    className={`calendar-cell ${isToday ? 'today' : ''}`}
+                    style={{ background: amount > 0 ? `rgba(231,76,60,${intensity})` : undefined }}
+                    onClick={() => { setSelectedDate(dateStr); setShowDatePicker(true); setViewMode('list'); }}
+                  >
+                    <span className="calendar-day">{d}</span>
+                    {amount > 0 && (
+                      <span className="calendar-amount">
+                        {amount >= 10000 ? `${(amount / 10000).toFixed(1)}万` : `${(amount / 1000).toFixed(amount >= 1000 ? 0 : 1)}k`}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="calendar-hint">日付をタップするとその日の明細を表示します</div>
+          </div>
+        );
+      })()}
+
       {/* Entry List */}
+      {viewMode === 'list' && (
       <div className="entry-list">
         {filteredEntries.length === 0 ? (
           <div className="empty-state">データがありません</div>
@@ -350,6 +452,7 @@ export default function ListTab({
           })
         )}
       </div>
+      )}
     </div>
   );
 }

@@ -371,6 +371,32 @@ export default function SummaryTab({ entries, settings, currentMonth }: SummaryT
 
   const hasTargets = settings.monthlyTargets && Object.keys(settings.monthlyTargets).some((k) => settings.monthlyTargets[k] > 0);
 
+  // 予算アラート: カテゴリ別の予算超過・使いすぎを集計
+  const budgetAlert = useMemo(() => {
+    if (!hasTargets) return null;
+    const catTotalsAll: Record<string, number> = {};
+    for (const entry of entries) {
+      if (!entry.date?.startsWith(currentMonth) || entry.type !== 'expense') continue;
+      const id = catToId(entry.category) || entry.category;
+      catTotalsAll[id] = (catTotalsAll[id] || 0) + entry.amount;
+    }
+    let budgetTotal = 0;
+    let spentOfBudgeted = 0;
+    const over: { name: string; icon: string; spent: number; target: number }[] = [];
+    const near: { name: string; icon: string; spent: number; target: number }[] = [];
+    for (const cat of EXPENSE_CATS) {
+      const target = settings.monthlyTargets?.[cat.id] || 0;
+      if (target <= 0) continue;
+      const spent = catTotalsAll[cat.id] || 0;
+      budgetTotal += target;
+      spentOfBudgeted += spent;
+      const pct = (spent / target) * 100;
+      if (pct >= 100) over.push({ name: cat.name, icon: cat.icon, spent, target });
+      else if (pct >= 80) near.push({ name: cat.name, icon: cat.icon, spent, target });
+    }
+    return { budgetTotal, spentOfBudgeted, over, near };
+  }, [entries, currentMonth, settings.monthlyTargets, hasTargets]);
+
   const hoveredSegment = segments.find((s) => s.catId === hoveredCat);
 
   return (
@@ -396,6 +422,37 @@ export default function SummaryTab({ entries, settings, currentMonth }: SummaryT
           </div>
         </div>
       </div>
+
+      {/* 予算アラート */}
+      {type === 'expense' && budgetAlert && (budgetAlert.over.length > 0 || budgetAlert.near.length > 0) && (
+        <div className="summary-section">
+          <div className={`budget-alert ${budgetAlert.over.length > 0 ? 'over' : 'near'}`}>
+            <div className="budget-alert-head">
+              {budgetAlert.over.length > 0 ? '⚠️ 予算オーバー' : '🔔 予算に近づいています'}
+            </div>
+            {budgetAlert.over.map((c) => (
+              <div key={c.name} className="budget-alert-row">
+                <span>{c.icon} {c.name}</span>
+                <span className="ba-over">¥{(c.spent - c.target).toLocaleString()} 超過</span>
+              </div>
+            ))}
+            {budgetAlert.near.map((c) => (
+              <div key={c.name} className="budget-alert-row">
+                <span>{c.icon} {c.name}</span>
+                <span className="ba-near">残 ¥{(c.target - c.spent).toLocaleString()}</span>
+              </div>
+            ))}
+            {budgetAlert.budgetTotal > 0 && (
+              <div className="budget-alert-total">
+                予算全体: ¥{budgetAlert.spentOfBudgeted.toLocaleString()} / ¥{budgetAlert.budgetTotal.toLocaleString()}
+                <span style={{ marginLeft: 6, color: budgetAlert.spentOfBudgeted > budgetAlert.budgetTotal ? '#E74C3C' : '#27AE60', fontWeight: 700 }}>
+                  ({((budgetAlert.spentOfBudgeted / budgetAlert.budgetTotal) * 100).toFixed(0)}%)
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Targets */}
       {type === 'expense' && hasTargets && (

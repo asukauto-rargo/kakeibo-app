@@ -44,4 +44,4 @@ export interface ParsedReceiptResult {
   items: ParsedReceiptItem[];
 }
 
-export type TabId = 'input' | 'list' | 'fixed' | 'summary' | 'settings';
+export type TabId = 'input' | 'list' | 'fixed' | 'summary' | 'analysis' | 'settings';

@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { parseReceipt } from '../lib/receiptParser';
 import { EXPENSE_CATS, findCat } from '../constants';
@@ -69,8 +69,6 @@ export default function ReceiptUpload({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
-
-    const newReceipts: ReceiptEntry[] = [];
 
     Array.from(fileList).forEach((file) => {
       if (!file.type.startsWith('image/') && !file.name.match(/\.(heic|heif)$/i)) {

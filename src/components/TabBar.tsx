@@ -44,6 +44,15 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
     ),
   },
   {
+    id: 'analysis',
+    label: '分析',
+    icon: (
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+        <path d="M3.5 18.5l6-6 4 4L22 6.9l-1.4-1.4-7.1 8-4-4L2 17l1.5 1.5z" />
+      </svg>
+    ),
+  },
+  {
     id: 'settings',
     label: '設定',
     icon: (
