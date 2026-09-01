@@ -291,6 +291,12 @@ input[type="date"]::-webkit-calendar-picker-indicator{opacity:0.6}
 .calendar-day{font-size:11px;font-weight:600;color:#555}
 .calendar-amount{font-size:9px;font-weight:700;color:#c0392b;margin-top:auto}
 .calendar-hint{text-align:center;font-size:10px;color:#aaa;margin-top:10px}
+.calendar-day-detail{margin-top:12px;background:#f8f9fa;border-radius:10px;padding:10px 12px}
+.cdd-head{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;color:#1a1a1a;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #e8e8e8}
+.cdd-total{color:#E74C3C}
+.cdd-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:12px}
+.cdd-store{color:#444;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-right:8px}
+.cdd-amount{color:#1a1a1a;font-weight:600;flex-shrink:0}
 
 /* ===== Budget alert ===== */
 .budget-alert{border-radius:var(--radius);padding:12px 14px}

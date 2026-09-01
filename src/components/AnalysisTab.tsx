@@ -5,6 +5,7 @@ import {
   aggregateStores,
   aggregateItems,
   aggregateMonthlyTotals,
+  parseReceiptMemo,
 } from '../lib/receiptMemo';
 
 interface AnalysisTabProps {
@@ -17,6 +18,7 @@ type Period = 'month' | 'all';
 
 export default function AnalysisTab({ entries, settings, currentMonth }: AnalysisTabProps) {
   const [period, setPeriod] = useState<Period>('all');
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
   const resolveUserName = (raw: string) => {
     if (!raw) return '';
@@ -51,6 +53,34 @@ export default function AnalysisTab({ entries, settings, currentMonth }: Analysi
 
   const hasReceiptData = items.length > 0 || stores.length > 0;
 
+  // カレンダー用: 当月の日別内訳（店舗・金額）
+  const dayMap = useMemo(() => {
+    const m: Record<number, { store: string; amount: number; category: string }[]> = {};
+    for (const e of entries) {
+      if (e.type !== 'expense' || !e.date?.startsWith(currentMonth)) continue;
+      const day = parseInt(e.date.split('-')[2], 10);
+      const parsed = parseReceiptMemo(e.memo || '');
+      const store = parsed.isReceipt && parsed.store
+        ? parsed.store
+        : (e.memo && !parsed.isReceipt ? e.memo : e.category);
+      (m[day] = m[day] || []).push({ store, amount: e.amount, category: e.category });
+    }
+    return m;
+  }, [entries, currentMonth]);
+
+  // 選択日の店舗別まとめ
+  const selectedDayStores = useMemo(() => {
+    if (selectedDay === null) return [];
+    const list = dayMap[selectedDay] || [];
+    const byStore: Record<string, { store: string; amount: number; category: string; count: number }> = {};
+    for (const it of list) {
+      if (!byStore[it.store]) byStore[it.store] = { store: it.store, amount: 0, category: it.category, count: 0 };
+      byStore[it.store].amount += it.amount;
+      byStore[it.store].count += 1;
+    }
+    return Object.values(byStore).sort((a, b) => b.amount - a.amount);
+  }, [selectedDay, dayMap]);
+
   return (
     <div className="analysis-tab">
       {/* Period toggle */}
@@ -62,6 +92,93 @@ export default function AnalysisTab({ entries, settings, currentMonth }: Analysi
           <button className={`toggle-btn ${period === 'month' ? 'active' : ''}`} onClick={() => setPeriod('month')}>
             今月
           </button>
+        </div>
+      </div>
+
+      {/* 日別カレンダー（どの日にどこでいくら） */}
+      <div className="summary-section">
+        <div className="card">
+          <h3 className="section-title">📅 日別カレンダー</h3>
+          {(() => {
+            const [y, mo] = currentMonth.split('-').map(Number);
+            const daysInMonth = new Date(y, mo, 0).getDate();
+            const firstWeekday = new Date(y, mo - 1, 1).getDay();
+            const dayTotals: Record<number, number> = {};
+            for (let d = 1; d <= daysInMonth; d++) {
+              dayTotals[d] = (dayMap[d] || []).reduce((s, it) => s + it.amount, 0);
+            }
+            const monthTotal = Object.values(dayTotals).reduce((s, v) => s + v, 0);
+            const maxDay = Math.max(...Object.values(dayTotals), 1);
+            const cells: (number | null)[] = [];
+            for (let i = 0; i < firstWeekday; i++) cells.push(null);
+            for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+            const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+            const todayStr = new Date().toISOString().split('T')[0];
+            return (
+              <>
+                <div className="calendar-monthtotal" style={{ marginTop: 0 }}>
+                  今月の支出 <strong>¥{monthTotal.toLocaleString()}</strong>
+                </div>
+                <div className="calendar-grid calendar-head">
+                  {weekdays.map((w, i) => (
+                    <div key={w} className="calendar-weekday" style={{ color: i === 0 ? '#E74C3C' : i === 6 ? '#3B82F6' : '#999' }}>{w}</div>
+                  ))}
+                </div>
+                <div className="calendar-grid">
+                  {cells.map((d, i) => {
+                    if (d === null) return <div key={`e${i}`} className="calendar-cell empty" />;
+                    const dateStr = `${currentMonth}-${String(d).padStart(2, '0')}`;
+                    const amount = dayTotals[d];
+                    const intensity = amount > 0 ? 0.12 + (amount / maxDay) * 0.5 : 0;
+                    const isToday = dateStr === todayStr;
+                    const isSel = selectedDay === d;
+                    return (
+                      <button
+                        key={d}
+                        className={`calendar-cell ${isToday ? 'today' : ''}`}
+                        style={{
+                          background: amount > 0 ? `rgba(231,76,60,${intensity})` : undefined,
+                          outline: isSel ? '2px solid #1a1a1a' : undefined,
+                        }}
+                        onClick={() => setSelectedDay(isSel ? null : d)}
+                      >
+                        <span className="calendar-day">{d}</span>
+                        {amount > 0 && (
+                          <span className="calendar-amount">
+                            {amount >= 10000 ? `${(amount / 10000).toFixed(1)}万` : `${(amount / 1000).toFixed(amount >= 1000 ? 0 : 1)}k`}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* 選択日の内訳 */}
+                {selectedDay !== null && (
+                  <div className="calendar-day-detail">
+                    <div className="cdd-head">
+                      {mo}月{selectedDay}日 の支出
+                      <span className="cdd-total">¥{(dayTotals[selectedDay] || 0).toLocaleString()}</span>
+                    </div>
+                    {selectedDayStores.length === 0 ? (
+                      <div style={{ fontSize: 12, color: '#999', padding: '8px 0', textAlign: 'center' }}>この日の支出はありません</div>
+                    ) : (
+                      selectedDayStores.map((s) => (
+                        <div key={s.store} className="cdd-row">
+                          <span className="cdd-store">
+                            {findCat(s.category)?.icon || '📦'} {s.store}
+                          </span>
+                          <span className="cdd-amount">¥{s.amount.toLocaleString()}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+                {selectedDay === null && (
+                  <div className="calendar-hint">日付をタップすると、その日にどこでいくら使ったか表示します</div>
+                )}
+              </>
+            );
+          })()}
         </div>
       </div>
 
