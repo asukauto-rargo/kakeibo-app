@@ -5,6 +5,8 @@ import {
   aggregateStores,
   aggregateItems,
   aggregateMonthlyTotals,
+  getItemPriceSeries,
+  aggregateWeekday,
   parseReceiptMemo,
 } from '../lib/receiptMemo';
 
@@ -19,6 +21,7 @@ type Period = 'month' | 'all';
 export default function AnalysisTab({ entries, settings, currentMonth }: AnalysisTabProps) {
   const [period, setPeriod] = useState<Period>('all');
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [priceKey, setPriceKey] = useState<string>('');
 
   const resolveUserName = (raw: string) => {
     if (!raw) return '';
@@ -52,6 +55,15 @@ export default function AnalysisTab({ entries, settings, currentMonth }: Analysi
   const monthDiffPct = lastMonthTotal > 0 ? (monthDiff / lastMonthTotal) * 100 : 0;
 
   const hasReceiptData = items.length > 0 || stores.length > 0;
+
+  // 価格推移（全期間の同一商品）
+  const priceSeriesList = useMemo(() => getItemPriceSeries(entries), [entries]);
+  const activePriceKey = priceKey || priceSeriesList[0]?.key || '';
+  const activeSeries = priceSeriesList.find((s) => s.key === activePriceKey);
+
+  // 曜日別傾向（対象期間）
+  const weekday = useMemo(() => aggregateWeekday(scopedEntries), [scopedEntries]);
+  const maxWeekday = Math.max(...weekday.map((w) => w.total), 1);
 
   // カレンダー用: 当月の日別内訳（店舗・金額）
   const dayMap = useMemo(() => {
@@ -225,6 +237,87 @@ export default function AnalysisTab({ entries, settings, currentMonth }: Analysi
           </div>
         </div>
       </div>
+
+      {/* 曜日別の傾向 */}
+      <div className="summary-section">
+        <div className="card">
+          <h3 className="section-title">曜日別の支出傾向（{period === 'all' ? '全期間' : '今月'}）</h3>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: 120, padding: '8px 0' }}>
+            {weekday.map((w, i) => {
+              const h = (w.total / maxWeekday) * 100;
+              const color = i === 0 ? '#E74C3C' : i === 6 ? '#3B82F6' : '#7f8c8d';
+              return (
+                <div key={w.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                  <div style={{ fontSize: 9, color: '#999', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    {w.total > 0 ? (w.total >= 10000 ? `${(w.total / 10000).toFixed(1)}万` : `${(w.total / 1000).toFixed(0)}k`) : ''}
+                  </div>
+                  <div style={{ width: '100%', maxWidth: 28, height: `${Math.max(h, 2)}%`, minHeight: 2, background: color, borderRadius: '4px 4px 0 0', transition: 'height .3s' }} />
+                  <div style={{ fontSize: 11, color, fontWeight: 600 }}>{w.label}</div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 10, color: '#aaa', textAlign: 'center' }}>棒の高さは合計支出額</div>
+        </div>
+      </div>
+
+      {/* 同じ商品の価格推移 */}
+      {priceSeriesList.length > 0 && (
+        <div className="summary-section">
+          <div className="card">
+            <h3 className="section-title">同じ商品の価格推移</h3>
+            <select
+              value={activePriceKey}
+              onChange={(e) => setPriceKey(e.target.value)}
+              className="form-input"
+              style={{ width: '100%', fontSize: 13, padding: '6px 8px', marginBottom: 10 }}
+            >
+              {priceSeriesList.map((s) => (
+                <option key={s.key} value={s.key}>{s.label}（{s.count}回）</option>
+              ))}
+            </select>
+            {activeSeries && (() => {
+              const pts = activeSeries.points;
+              const amounts = pts.map((p) => p.amount);
+              const minA = Math.min(...amounts);
+              const maxA = Math.max(...amounts);
+              const W = 300, H = 110, padX = 10, padY = 16;
+              const n = pts.length;
+              const xFor = (i: number) => padX + (n === 1 ? (W - 2 * padX) / 2 : (i * (W - 2 * padX)) / (n - 1));
+              const yFor = (a: number) => {
+                if (maxA === minA) return H / 2;
+                return padY + (1 - (a - minA) / (maxA - minA)) * (H - 2 * padY);
+              };
+              const linePts = pts.map((p, i) => `${xFor(i)},${yFor(p.amount)}`).join(' ');
+              const first = pts[0].amount;
+              const last = pts[n - 1].amount;
+              const diff = last - first;
+              return (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                    <span style={{ color: '#999' }}>最安 ¥{minA.toLocaleString()} / 最高 ¥{maxA.toLocaleString()}</span>
+                    <span style={{ color: diff > 0 ? '#E74C3C' : diff < 0 ? '#27AE60' : '#999', fontWeight: 700 }}>
+                      {diff > 0 ? `▲¥${diff.toLocaleString()}` : diff < 0 ? `▼¥${Math.abs(diff).toLocaleString()}` : '横ばい'}
+                    </span>
+                  </div>
+                  <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible' }}>
+                    <polyline points={linePts} fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinejoin="round" />
+                    {pts.map((p, i) => (
+                      <g key={i}>
+                        <circle cx={xFor(i)} cy={yFor(p.amount)} r="3" fill="#3B82F6" />
+                        <text x={xFor(i)} y={yFor(p.amount) - 6} textAnchor="middle" fontSize="9" fill="#666" fontWeight="600">¥{p.amount}</text>
+                        <text x={xFor(i)} y={H - 2} textAnchor="middle" fontSize="8" fill="#aaa">
+                          {p.date.slice(5).replace('-', '/')}
+                        </text>
+                      </g>
+                    ))}
+                  </svg>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       {!hasReceiptData && (
         <div className="summary-section">

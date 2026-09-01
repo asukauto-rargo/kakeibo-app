@@ -72,10 +72,39 @@ export interface ItemStat {
 
 /**
  * 品目名の表記ゆれを吸収するための正規化キー。
- * 全角/半角スペース除去・小文字化のみ（過度な正規化はしない）。
+ * スペース・記号除去、小文字化、サ/ザ等のゆれを吸収。
  */
 function normalizeItemKey(name: string): string {
-  return name.replace(/[\s　]/g, '').toLowerCase();
+  return name
+    .replace(/[\s　!！・,，。.／/()（）\[\]「」【】]/g, '')
+    .replace(/サバス/g, 'ザバス')
+    .toLowerCase();
+}
+
+/**
+ * 同一商品を名寄せするための正規化。
+ * よく買う商品はブランド・表記ゆれを吸収して同じ商品として集計する。
+ * 返り値: { key: グループ化キー, label: 表示名 }
+ */
+const CANON_RULES: { re: RegExp; key: string; label: string }[] = [
+  { re: /タリーズ|バリスタズ/, key: 'tullys-latte', label: 'タリーズ 無糖ラテ' },
+  { re: /天然水|おいしい水|いろはす|イロハス|富士山|アサヒ.*水|ミネラルウォーター/, key: 'water', label: '水' },
+  { re: /カロリーメイト/, key: 'caloriemate', label: 'カロリーメイト' },
+  { re: /(ザバス|サバス).*(ヨーグルト|ﾖｰｸﾞﾙﾄ)/, key: 'savas-yogurt', label: 'ザバス ヨーグルト' },
+  { re: /R\s?-?\s?1/, key: 'meiji-r1', label: '明治 R-1' },
+  { re: /チョレギサラダ/, key: 'choregi', label: 'チョレギサラダ' },
+  { re: /メンチカツ/, key: 'menchi', label: 'メンチカツ' },
+  { re: /ぶどうパン|ブドウパン/, key: 'budopan', label: 'ぶどうパン' },
+  { re: /ランチパック/, key: 'lunchpack', label: 'ランチパック' },
+  { re: /おかめ豆腐|おかめとうふ/, key: 'okame-tofu', label: 'おかめ豆腐' },
+  { re: /お好み焼き|オコノミヤキ/, key: 'okonomiyaki', label: 'お好み焼き' },
+];
+
+export function canonicalizeItemName(name: string): { key: string; label: string } {
+  for (const rule of CANON_RULES) {
+    if (rule.re.test(name)) return { key: rule.key, label: rule.label };
+  }
+  return { key: normalizeItemKey(name), label: name };
 }
 
 /**
@@ -127,19 +156,81 @@ export function aggregateItems(entries: Entry[], onlyFood = false): ItemStat[] {
       const catName = item.category ? catToName(item.category) : '';
       if (onlyFood && catName !== '食費') continue;
 
-      const key = normalizeItemKey(item.name);
+      const { key, label } = canonicalizeItemName(item.name);
       const existing = map.get(key);
       if (existing) {
         existing.count += 1;
         existing.total += item.amount;
         if (!existing.category && catName) existing.category = catName;
       } else {
-        map.set(key, { name: item.name, count: 1, total: item.amount, category: catName });
+        map.set(key, { name: label, count: 1, total: item.amount, category: catName });
       }
     }
   }
 
   return Array.from(map.values()).sort((a, b) => b.count - a.count || b.total - a.total);
+}
+
+/** 商品ごとの価格推移（同一商品を名寄せして日付順の価格列を返す） */
+export interface PriceSeries {
+  key: string;
+  label: string;
+  points: { date: string; amount: number }[];
+  count: number;
+}
+
+export function getItemPriceSeries(entries: Entry[]): PriceSeries[] {
+  const map = new Map<string, PriceSeries>();
+
+  for (const entry of entries) {
+    if (entry.type !== 'expense') continue;
+    const parsed = parseReceiptMemo(entry.memo || '');
+    if (!parsed.isReceipt) continue;
+    for (const item of parsed.items) {
+      if (!item.name || item.amount <= 0) continue;
+      const { key, label } = canonicalizeItemName(item.name);
+      const s = map.get(key) || { key, label, points: [], count: 0 };
+      s.points.push({ date: entry.date, amount: item.amount });
+      s.count += 1;
+      map.set(key, s);
+    }
+  }
+
+  const list = Array.from(map.values());
+  for (const s of list) {
+    s.points.sort((a, b) => a.date.localeCompare(b.date));
+  }
+  // 2回以上・2日以上の商品を、記録数の多い順で返す
+  return list
+    .filter((s) => {
+      const uniqueDates = new Set(s.points.map((p) => p.date));
+      return s.points.length >= 2 && uniqueDates.size >= 2;
+    })
+    .sort((a, b) => b.count - a.count);
+}
+
+/** 曜日別の支出集計（0=日曜〜6=土曜） */
+export interface WeekdayStat {
+  label: string;
+  total: number;
+  count: number;
+}
+
+export function aggregateWeekday(entries: Entry[]): WeekdayStat[] {
+  const labels = ['日', '月', '火', '水', '木', '金', '土'];
+  const totals = new Array(7).fill(0);
+  const counts = new Array(7).fill(0);
+
+  for (const entry of entries) {
+    if (entry.type !== 'expense' || !entry.date) continue;
+    const d = new Date(entry.date + 'T00:00:00');
+    const wd = d.getDay();
+    if (Number.isNaN(wd)) continue;
+    totals[wd] += entry.amount;
+    counts[wd] += 1;
+  }
+
+  return labels.map((label, i) => ({ label, total: totals[i], count: counts[i] }));
 }
 
 /**
