@@ -5,7 +5,6 @@ import {
   aggregateStores,
   aggregateItems,
   aggregateMonthlyTotals,
-  getItemPriceSeries,
   aggregateWeekday,
   parseReceiptMemo,
 } from '../lib/receiptMemo';
@@ -21,7 +20,6 @@ type Period = 'month' | 'all';
 export default function AnalysisTab({ entries, settings, currentMonth }: AnalysisTabProps) {
   const [period, setPeriod] = useState<Period>('all');
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const [priceKey, setPriceKey] = useState<string>('');
 
   const resolveUserName = (raw: string) => {
     if (!raw) return '';
@@ -56,18 +54,20 @@ export default function AnalysisTab({ entries, settings, currentMonth }: Analysi
 
   const hasReceiptData = items.length > 0 || stores.length > 0;
 
-  // 価格推移（全期間の同一商品）
-  const priceSeriesList = useMemo(() => getItemPriceSeries(entries), [entries]);
-  const activePriceKey = priceKey || priceSeriesList[0]?.key || '';
-  const activeSeries = priceSeriesList.find((s) => s.key === activePriceKey);
-
   // 曜日別傾向（対象期間）
   const weekday = useMemo(() => aggregateWeekday(scopedEntries), [scopedEntries]);
   const maxWeekday = Math.max(...weekday.map((w) => w.total), 1);
 
-  // カレンダー用: 当月の日別内訳（店舗・金額）
+  // カレンダー用: 当月の日別内訳（店舗・金額・品目）
+  interface DayEntry {
+    store: string;
+    amount: number;
+    category: string;
+    items: { name: string; amount: number; category: string }[];
+    user: string;
+  }
   const dayMap = useMemo(() => {
-    const m: Record<number, { store: string; amount: number; category: string }[]> = {};
+    const m: Record<number, DayEntry[]> = {};
     for (const e of entries) {
       if (e.type !== 'expense' || !e.date?.startsWith(currentMonth)) continue;
       const day = parseInt(e.date.split('-')[2], 10);
@@ -75,23 +75,34 @@ export default function AnalysisTab({ entries, settings, currentMonth }: Analysi
       const store = parsed.isReceipt && parsed.store
         ? parsed.store
         : (e.memo && !parsed.isReceipt ? e.memo : e.category);
-      (m[day] = m[day] || []).push({ store, amount: e.amount, category: e.category });
+      (m[day] = m[day] || []).push({
+        store,
+        amount: e.amount,
+        category: e.category,
+        items: parsed.isReceipt ? parsed.items : [],
+        user: resolveUserName(e.user_name),
+      });
     }
+    // 各日は金額の大きい順
+    for (const k of Object.keys(m)) m[+k].sort((a, b) => b.amount - a.amount);
     return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, currentMonth]);
 
-  // 選択日の店舗別まとめ
-  const selectedDayStores = useMemo(() => {
+  // 選択日の内訳（店舗＝取引ごと、品目つき）
+  const selectedDayEntries = useMemo(() => {
     if (selectedDay === null) return [];
-    const list = dayMap[selectedDay] || [];
-    const byStore: Record<string, { store: string; amount: number; category: string; count: number }> = {};
-    for (const it of list) {
-      if (!byStore[it.store]) byStore[it.store] = { store: it.store, amount: 0, category: it.category, count: 0 };
-      byStore[it.store].amount += it.amount;
-      byStore[it.store].count += 1;
-    }
-    return Object.values(byStore).sort((a, b) => b.amount - a.amount);
+    return dayMap[selectedDay] || [];
   }, [selectedDay, dayMap]);
+
+  // 選択日のカテゴリ別まとめ
+  const selectedDayCats = useMemo(() => {
+    const byCat: Record<string, number> = {};
+    for (const e of selectedDayEntries) {
+      byCat[e.category] = (byCat[e.category] || 0) + e.amount;
+    }
+    return Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+  }, [selectedDayEntries]);
 
   return (
     <div className="analysis-tab">
@@ -126,6 +137,16 @@ export default function AnalysisTab({ entries, settings, currentMonth }: Analysi
             for (let d = 1; d <= daysInMonth; d++) cells.push(d);
             const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
             const todayStr = new Date().toISOString().split('T')[0];
+            // ヒートマップ配色: 支出額に応じて 緑→黄→橙→赤
+            const heat = (amt: number): string | undefined => {
+              if (amt <= 0) return undefined;
+              const r = amt / maxDay;
+              if (r <= 0.2) return 'rgba(46,204,113,0.22)';
+              if (r <= 0.4) return 'rgba(241,196,15,0.32)';
+              if (r <= 0.6) return 'rgba(230,126,34,0.42)';
+              if (r <= 0.8) return 'rgba(231,76,60,0.52)';
+              return 'rgba(192,57,43,0.78)';
+            };
             return (
               <>
                 <div className="calendar-monthtotal" style={{ marginTop: 0 }}>
@@ -141,7 +162,6 @@ export default function AnalysisTab({ entries, settings, currentMonth }: Analysi
                     if (d === null) return <div key={`e${i}`} className="calendar-cell empty" />;
                     const dateStr = `${currentMonth}-${String(d).padStart(2, '0')}`;
                     const amount = dayTotals[d];
-                    const intensity = amount > 0 ? 0.12 + (amount / maxDay) * 0.5 : 0;
                     const isToday = dateStr === todayStr;
                     const isSel = selectedDay === d;
                     return (
@@ -149,7 +169,7 @@ export default function AnalysisTab({ entries, settings, currentMonth }: Analysi
                         key={d}
                         className={`calendar-cell ${isToday ? 'today' : ''}`}
                         style={{
-                          background: amount > 0 ? `rgba(231,76,60,${intensity})` : undefined,
+                          background: heat(amount),
                           outline: isSel ? '2px solid #1a1a1a' : undefined,
                         }}
                         onClick={() => setSelectedDay(isSel ? null : d)}
@@ -164,29 +184,61 @@ export default function AnalysisTab({ entries, settings, currentMonth }: Analysi
                     );
                   })}
                 </div>
+                {/* ヒートマップ凡例 */}
+                <div className="heat-legend">
+                  <span>少</span>
+                  <span className="heat-swatch" style={{ background: 'rgba(46,204,113,0.22)' }} />
+                  <span className="heat-swatch" style={{ background: 'rgba(241,196,15,0.32)' }} />
+                  <span className="heat-swatch" style={{ background: 'rgba(230,126,34,0.42)' }} />
+                  <span className="heat-swatch" style={{ background: 'rgba(231,76,60,0.52)' }} />
+                  <span className="heat-swatch" style={{ background: 'rgba(192,57,43,0.78)' }} />
+                  <span>多</span>
+                </div>
+
                 {/* 選択日の内訳 */}
                 {selectedDay !== null && (
                   <div className="calendar-day-detail">
                     <div className="cdd-head">
-                      {mo}月{selectedDay}日 の支出
+                      {mo}月{selectedDay}日（{['日','月','火','水','木','金','土'][new Date(y, mo - 1, selectedDay).getDay()]}）
                       <span className="cdd-total">¥{(dayTotals[selectedDay] || 0).toLocaleString()}</span>
                     </div>
-                    {selectedDayStores.length === 0 ? (
+                    {selectedDayEntries.length === 0 ? (
                       <div style={{ fontSize: 12, color: '#999', padding: '8px 0', textAlign: 'center' }}>この日の支出はありません</div>
                     ) : (
-                      selectedDayStores.map((s) => (
-                        <div key={s.store} className="cdd-row">
-                          <span className="cdd-store">
-                            {findCat(s.category)?.icon || '📦'} {s.store}
-                          </span>
-                          <span className="cdd-amount">¥{s.amount.toLocaleString()}</span>
+                      <>
+                        {/* カテゴリ別サマリー */}
+                        <div className="cdd-cats">
+                          {selectedDayCats.map(([cat, amt]) => (
+                            <span key={cat} className="cdd-cat-chip">
+                              {findCat(cat)?.icon || '📦'}{cat} ¥{amt.toLocaleString()}
+                            </span>
+                          ))}
                         </div>
-                      ))
+                        {/* 取引ごとの明細 */}
+                        {selectedDayEntries.map((e, ei) => (
+                          <div key={ei} className="cdd-store-block">
+                            <div className="cdd-store-head">
+                              <span className="cdd-store">{findCat(e.category)?.icon || '📦'} {e.store}</span>
+                              <span className="cdd-amount">¥{e.amount.toLocaleString()}</span>
+                            </div>
+                            {e.items.length > 0 && (
+                              <div className="cdd-items">
+                                {e.items.map((it, ii) => (
+                                  <div key={ii} className="cdd-item-row">
+                                    <span>{it.name}</span>
+                                    <span>¥{it.amount.toLocaleString()}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </>
                     )}
                   </div>
                 )}
                 {selectedDay === null && (
-                  <div className="calendar-hint">日付をタップすると、その日にどこでいくら使ったか表示します</div>
+                  <div className="calendar-hint">日付をタップすると、その日の店舗・品目・カテゴリ内訳を表示します</div>
                 )}
               </>
             );
@@ -260,64 +312,6 @@ export default function AnalysisTab({ entries, settings, currentMonth }: Analysi
           <div style={{ fontSize: 10, color: '#aaa', textAlign: 'center' }}>棒の高さは合計支出額</div>
         </div>
       </div>
-
-      {/* 同じ商品の価格推移 */}
-      {priceSeriesList.length > 0 && (
-        <div className="summary-section">
-          <div className="card">
-            <h3 className="section-title">同じ商品の価格推移</h3>
-            <select
-              value={activePriceKey}
-              onChange={(e) => setPriceKey(e.target.value)}
-              className="form-input"
-              style={{ width: '100%', fontSize: 13, padding: '6px 8px', marginBottom: 10 }}
-            >
-              {priceSeriesList.map((s) => (
-                <option key={s.key} value={s.key}>{s.label}（{s.count}回）</option>
-              ))}
-            </select>
-            {activeSeries && (() => {
-              const pts = activeSeries.points;
-              const amounts = pts.map((p) => p.amount);
-              const minA = Math.min(...amounts);
-              const maxA = Math.max(...amounts);
-              const W = 300, H = 110, padX = 10, padY = 16;
-              const n = pts.length;
-              const xFor = (i: number) => padX + (n === 1 ? (W - 2 * padX) / 2 : (i * (W - 2 * padX)) / (n - 1));
-              const yFor = (a: number) => {
-                if (maxA === minA) return H / 2;
-                return padY + (1 - (a - minA) / (maxA - minA)) * (H - 2 * padY);
-              };
-              const linePts = pts.map((p, i) => `${xFor(i)},${yFor(p.amount)}`).join(' ');
-              const first = pts[0].amount;
-              const last = pts[n - 1].amount;
-              const diff = last - first;
-              return (
-                <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                    <span style={{ color: '#999' }}>最安 ¥{minA.toLocaleString()} / 最高 ¥{maxA.toLocaleString()}</span>
-                    <span style={{ color: diff > 0 ? '#E74C3C' : diff < 0 ? '#27AE60' : '#999', fontWeight: 700 }}>
-                      {diff > 0 ? `▲¥${diff.toLocaleString()}` : diff < 0 ? `▼¥${Math.abs(diff).toLocaleString()}` : '横ばい'}
-                    </span>
-                  </div>
-                  <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible' }}>
-                    <polyline points={linePts} fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinejoin="round" />
-                    {pts.map((p, i) => (
-                      <g key={i}>
-                        <circle cx={xFor(i)} cy={yFor(p.amount)} r="3" fill="#3B82F6" />
-                        <text x={xFor(i)} y={yFor(p.amount) - 6} textAnchor="middle" fontSize="9" fill="#666" fontWeight="600">¥{p.amount}</text>
-                        <text x={xFor(i)} y={H - 2} textAnchor="middle" fontSize="8" fill="#aaa">
-                          {p.date.slice(5).replace('-', '/')}
-                        </text>
-                      </g>
-                    ))}
-                  </svg>
-                </>
-              );
-            })()}
-          </div>
-        </div>
-      )}
 
       {!hasReceiptData && (
         <div className="summary-section">
